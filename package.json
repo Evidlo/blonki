@@ -23,6 +23,8 @@
     "vite": "^6.1.0"
   },
   "dependencies": {
-    "anki-apkg-export": "^4.0.3"
+    "fzstd": "^0.1.1",
+    "jszip": "^3.10.1",
+    "sql.js": "^1.8.0"
   }
 }

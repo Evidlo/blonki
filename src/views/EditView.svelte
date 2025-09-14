@@ -2,6 +2,9 @@
   import { onMount } from 'svelte';
   import { deckStore, selectedDeckStore } from '../stores/deckStore';
   import { cardStore, currentCardStore } from '../stores/cardStore';
+  import { storageService } from '../services/storageService';
+  import { exportService } from '../services/exportService';
+  import TableNavigation from '../components/TableNavigation.svelte';
   import type { Deck, Card } from '../types';
 
   let decks: Deck[] = [];
@@ -10,6 +13,8 @@
   let currentCard: Card | null = null;
   let editingCard: Card | null = null;
   let isEditing = false;
+  let selectedDeckIndex = 0;
+  let selectedCardIndex = 0;
 
   // Subscribe to stores
   deckStore.subscribe(value => decks = value);
@@ -18,66 +23,36 @@
   currentCardStore.subscribe(value => currentCard = value);
 
   onMount(() => {
-    loadDecks();
+    // Data is loaded by storage service initialization in App.svelte
+    // Just subscribe to store changes
   });
-
-  async function loadDecks() {
-    // TODO: Load from storage
-    const sampleDecks: Deck[] = [
-      {
-        id: '1',
-        name: 'Spanish Vocabulary',
-        description: 'Basic Spanish words and phrases',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        cardCount: 0
-      },
-      {
-        id: '2',
-        name: 'JavaScript Concepts',
-        description: 'Programming concepts and syntax',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        cardCount: 0
-      }
-    ];
-    deckStore.set(sampleDecks);
-  }
 
   function selectDeck(deckId: string) {
     selectedDeckStore.set(deckId);
     loadCardsForDeck(deckId);
   }
 
+  function selectDeckByIndex(index: number) {
+    if (index >= 0 && index < decks.length) {
+      selectedDeckIndex = index;
+      selectDeck(decks[index].id);
+    }
+  }
+
+  function selectCardByIndex(index: number) {
+    if (index >= 0 && index < cards.length) {
+      selectedCardIndex = index;
+      editCard(cards[index]);
+    }
+  }
+
   async function loadCardsForDeck(deckId: string) {
-    // TODO: Load cards from storage
-    const sampleCards: Card[] = [
-      {
-        id: '1',
-        front: 'Hello',
-        back: 'Hola',
-        deckId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        interval: 1,
-        repetitions: 0,
-        easeFactor: 2.5,
-        dueDate: new Date()
-      },
-      {
-        id: '2',
-        front: 'Goodbye',
-        back: 'Adiós',
-        deckId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        interval: 1,
-        repetitions: 0,
-        easeFactor: 2.5,
-        dueDate: new Date()
-      }
-    ];
-    cardStore.set(sampleCards);
+    try {
+      const deckCards = await storageService.getCardsForDeck(deckId);
+      cardStore.set(deckCards);
+    } catch (error) {
+      console.error('Failed to load cards for deck:', error);
+    }
   }
 
   function editCard(card: Card) {
@@ -85,17 +60,23 @@
     isEditing = true;
   }
 
-  function saveCard() {
+  async function saveCard() {
     if (!editingCard) return;
     
-    // TODO: Save to storage
-    const updatedCards = cards.map(card => 
-      card.id === editingCard!.id ? editingCard! : card
-    );
-    cardStore.set(updatedCards);
-    
-    isEditing = false;
-    editingCard = null;
+    try {
+      if (editingCard.id && cards.some(card => card.id === editingCard!.id)) {
+        // Update existing card
+        await storageService.updateCard(editingCard);
+      } else {
+        // Create new card
+        await storageService.addCard(editingCard);
+      }
+      
+      isEditing = false;
+      editingCard = null;
+    } catch (error) {
+      console.error('Failed to save card:', error);
+    }
   }
 
   function cancelEdit() {
@@ -106,28 +87,74 @@
   function createNewCard() {
     if (!selectedDeck) return;
     
-    const newCard: Card = {
-      id: Date.now().toString(),
+    const newCard: Omit<Card, 'id' | 'createdAt' | 'updatedAt'> = {
       front: '',
       back: '',
       deckId: selectedDeck,
-      createdAt: new Date(),
-      updatedAt: new Date(),
       interval: 1,
       repetitions: 0,
       easeFactor: 2.5,
       dueDate: new Date()
     };
     
-    editingCard = newCard;
+    editingCard = newCard as Card; // Temporary for editing
     isEditing = true;
+  }
+
+  async function exportDeck(deckId: string) {
+    try {
+      await exportService.exportDeck(deckId);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async function exportAllDecks() {
+    try {
+      await exportService.exportAllDecks();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async function deleteCard(cardId: string, cardFront: string) {
+    if (confirm(`Are you sure you want to delete this card?\n\nFront: "${cardFront}"`)) {
+      try {
+        await storageService.deleteCard(cardId);
+        
+        // Reset editing state if the deleted card was being edited
+        if (editingCard && editingCard.id === cardId) {
+          editingCard = null;
+          isEditing = false;
+          currentCardStore.set(null);
+        }
+        
+        // Reload cards for the current deck
+        if (selectedDeck) {
+          await loadCardsForDeck(selectedDeck);
+        }
+      } catch (error) {
+        console.error('Delete failed:', error);
+        alert(`Failed to delete card: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
   }
 </script>
 
 {#if !selectedDeck}
   <!-- Deck Selection View -->
   <div class="space-y-6">
-    <h2 class="text-xl font-semibold text-gray-900">Select a Deck to Edit</h2>
+    <div class="flex justify-between items-center">
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Select a Deck to Edit</h2>
+      <button
+        class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+        on:click={exportAllDecks}
+      >
+        Export All
+      </button>
+    </div>
 
     {#if decks.length === 0}
       <div class="text-center py-12">
@@ -135,49 +162,59 @@
         <p class="text-sm text-gray-400">Create a new deck to get started</p>
       </div>
     {:else}
-      <div class="bg-white rounded-lg shadow overflow-hidden table-container">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Deck Name
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Description
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Cards
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            {#each decks as deck}
-              <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {deck.name}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {deck.description || 'No description'}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {deck.cardCount}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+      <TableNavigation items={decks} selectedIndex={selectedDeckIndex} onSelect={selectDeckByIndex}>
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Deck Name
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Description
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Cards
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {#each decks as deck, index}
+            <tr 
+              class="hover:bg-gray-200 {selectedDeckIndex === index ? 'selected' : ''}"
+              on:click={() => selectDeck(deck.id)}
+              on:mouseenter={() => selectedDeckIndex = index}
+            >
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                {deck.name}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {deck.description || 'No description'}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {deck.cardCount}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <div class="flex space-x-2">
                   <button
-                    class="text-blue-600 hover:text-blue-900"
+                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
                     on:click={() => selectDeck(deck.id)}
                   >
                     Edit
                   </button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+                  <button
+                    class="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
+                    on:click={() => exportDeck(deck.id)}
+                  >
+                    Export
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </TableNavigation>
     {/if}
   </div>
 {:else if isEditing}
@@ -252,43 +289,54 @@
         </button>
       </div>
     {:else}
-      <div class="bg-white rounded-lg shadow overflow-hidden table-container">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Front
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Back
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            {#each cards as card}
-              <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  {card.front}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  {card.back}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+      <TableNavigation items={cards} selectedIndex={selectedCardIndex} onSelect={selectCardByIndex}>
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Front
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Back
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {#each cards as card, index}
+            <tr 
+              class="hover:bg-gray-200 {selectedCardIndex === index ? 'selected' : ''}"
+              on:click={() => editCard(card)}
+              on:mouseenter={() => selectedCardIndex = index}
+            >
+              <td class="px-6 py-4 text-sm text-gray-900">
+                {card.front}
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-900">
+                {card.back}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <div class="flex space-x-2">
                   <button
-                    class="text-blue-600 hover:text-blue-900"
+                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
                     on:click={() => editCard(card)}
                   >
                     Edit
                   </button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+                  <button
+                    class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                    on:click|stopPropagation={() => deleteCard(card.id, card.front)}
+                    title="Delete card"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </TableNavigation>
     {/if}
   </div>
 {/if}

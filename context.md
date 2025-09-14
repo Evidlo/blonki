@@ -2,154 +2,131 @@
 
 ## Project Overview
 
-Blonki is a web-based Anki client SPA (Single Page Application) built with Svelte 5 and TypeScript. The application provides a modern, responsive interface for spaced repetition learning with support for importing/exporting Anki decks.
+Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The application provides a modern, responsive interface for spaced repetition learning with full support for importing/exporting Anki decks (.apkg files) and comprehensive data management.
 
-## Design Requirements & Discussion
+## Current Architecture
 
 ### Core Application Structure
 - **Five main tabs**: Learn, Edit, Stats, Settings, Extras
-- **Responsive design**: Centered column layout that works on both desktop and mobile
-- **Navigation**: Tab-based with back button/ESC key support for sub-views
-- **Data storage**: Configurable between browser localStorage and Filesystem API
+- **Responsive design**: Centered column layout optimized for desktop and mobile
+- **Navigation**: Tab-based with persistent back button and ESC key support
+- **Data storage**: Dual storage system (localStorage + Filesystem API)
+- **Theme system**: Light/dark mode with automatic detection
 
-### User Flow Specifications
+### State Management Architecture
 
-#### Learn Tab
-- **1st view**: Table showing available decks with selection capability
-- **Import functionality**: "Import from URL" and "Open from File" buttons above the table
-- **2nd view**: Card review interface with front/back display and correct/incorrect tracking
+#### Svelte Stores
+- **`appStore`**: Application state, current view, navigation history
+- **`settingsStore`**: User preferences, SRS algorithm settings, theme
+- **`deckStore`**: Deck collection management
+- **`cardStore`**: Card data, current card, study session state
+- **`studySessionStore`**: Persistent study session (card index, show back, deck ID)
 
-#### Edit Tab
-- **1st view**: Table showing available decks for editing
-- **2nd view**: Card editing interface with front/back content modification and save functionality
+#### Storage Abstraction Layer
+- **`StorageAdapter` interface**: Unified storage operations
+- **`LocalStorageAdapter`**: Browser localStorage implementation
+- **`FilesystemStorageAdapter`**: File system API implementation
+- **`StorageService`**: Centralized service managing all storage operations
 
-#### Stats Tab
-- **1st view**: Grid of cards with individual review plots
-- **Analytics**: Reviews line plot showing number of reviews over the last month
-- **Performance metrics**: Card-level statistics and learning progress
+### Service Layer
 
-#### Settings Tab
-- **Configuration options**: List of settings with input fields
-- **SRS Algorithm**: Dropdown selection for spaced repetition algorithms
-- **Storage preferences**: Choice between localStorage and Filesystem API
-- **UI customization**: Theme, cards per session, and other preferences
+#### Core Services
+- **`storageService`**: Data persistence, CRUD operations, import/export
+- **`importService`**: File and URL-based data import (JSON, APKG)
+- **`exportService`**: Data export functionality
+- **`themeService`**: Theme management and persistence
+- **`keyboardService`**: Keyboard shortcut handling
 
-#### Extras Tab
-- **Plugin system**: Empty view intended for future plugin functionality
-
-### Technical Requirements
-
-#### Data Storage
-- **Primary**: Browser localStorage for immediate functionality
-- **Secondary**: Filesystem API support with browser compatibility detection
-- **File formats**: Support for .apkg files with future expansion to other formats
-
-#### Spaced Repetition System
-- **Algorithms**: Support for basic Anki algorithm with configurability
-- **Settings integration**: Algorithm selection via dropdown in Settings tab
-- **Customization**: Configurable parameters for different SRS algorithms
-
-#### UI/UX Requirements
-- **Layout**: Centered column design using Flexbox for responsiveness
-- **Mobile optimization**: Proper viewport handling and responsive tables
-- **Accessibility**: Keyboard navigation, ARIA labels, and screen reader support
-- **Navigation**: ESC key and back button support for sub-view navigation
+#### APKG Processing
+- **`APKGParser`**: SQLite-based Anki deck parsing using sql.js
+- **ZIP handling**: JSZip for APKG file extraction
+- **Compression**: fzstd for Zstandard decompression (.anki21b files)
+- **SQLite parsing**: sql.js with WASM for database queries
 
 ## Implementation Status
 
 ### ✅ Completed Features
 
-#### Project Foundation
+#### Core Application
 - [x] Svelte 5 + TypeScript project setup
-- [x] Tailwind CSS integration (v4 with PostCSS)
-- [x] Vite build system configuration
-- [x] Project structure with organized folders (components, stores, utils, types, views)
+- [x] Tailwind CSS v4 integration with PostCSS
+- [x] Vite build system with WASM support
+- [x] Responsive design with mobile optimization
+- [x] Dark/light theme system with persistence
 
-#### Core Architecture
-- [x] TypeScript type definitions for cards, decks, settings, and app state
-- [x] Svelte stores for state management (app, settings, decks, cards)
-- [x] Storage abstraction layer with localStorage implementation
-- [x] SRS algorithm framework with SM-2, SM-17, and custom implementations
+#### Data Management
+- [x] Complete storage abstraction layer
+- [x] LocalStorage and Filesystem API adapters
+- [x] Data import/export functionality
+- [x] APKG file parsing and import
+- [x] JSON data import/export
+- [x] Backup and restore functionality
+- [x] Data migration from localStorage
 
 #### User Interface
-- [x] Responsive main layout with centered column design
-- [x] Tab-based navigation system (Learn, Edit, Stats, Settings, Extras)
-- [x] Mobile-responsive design with proper viewport handling
-- [x] Back navigation with ESC key support
-- [x] Accessible form controls with proper ARIA labels
-
-#### Learn Tab Implementation
-- [x] Deck selection table with sample data
-- [x] Import buttons ("Import from URL" and "Open from File")
-- [x] Card review interface with front/back display
-- [x] Correct/incorrect response tracking
+- [x] Tab-based navigation with history
+- [x] Back button functionality (ESC key support)
+- [x] Persistent study session state
+- [x] Keyboard navigation for tables
+- [x] Responsive card review interface
 - [x] Progress indicators and session management
 
-#### Edit Tab Implementation
+#### Learn Tab
+- [x] Deck selection with table navigation
+- [x] Card review interface with front/back display
+- [x] Study session persistence across tab switches
+- [x] Progress tracking and completion handling
+- [x] Import from URL and file upload
+- [x] Deck export functionality
+- [x] Deck deletion with card cleanup
+
+#### Edit Tab
 - [x] Deck selection for editing
-- [x] Card editing interface with front/back text areas
-- [x] Create new card functionality
-- [x] Save/cancel operations for card modifications
+- [x] Card editing interface
+- [x] Card creation and modification
+- [x] Card deletion functionality
+- [x] Export functionality
+- [x] Real-time data persistence
 
-#### Stats Tab Implementation
-- [x] Summary cards with key metrics (total reviews, accuracy, cards due)
-- [x] Review history visualization with sample data
-- [x] Card performance grid showing individual card statistics
-- [x] Responsive chart layouts for mobile and desktop
-
-#### Settings Tab Implementation
+#### Settings Tab
 - [x] Storage type selection (localStorage/Filesystem API)
-- [x] SRS algorithm dropdown (SM-2, SM-17, Custom)
-- [x] Algorithm parameter configuration
-- [x] UI preferences (theme, cards per session)
-- [x] Settings persistence and validation
+- [x] SRS algorithm configuration
+- [x] Theme selection and persistence
+- [x] File management (create new, open existing)
+- [x] Data management (backup, restore, migrate, clear)
+- [x] Default values loading
 
-#### Data Layer
-- [x] LocalStorage adapter implementation
-- [x] Filesystem API adapter framework (placeholder)
-- [x] SRS algorithm implementations (SM-2, SM-17, Custom)
-- [x] Anki file handling utilities with anki-apkg-export integration
+#### Stats Tab
+- [x] Summary metrics display
+- [x] Review history visualization
+- [x] Card performance grid
+- [x] Responsive chart layouts
 
-### 🚧 In Progress / Partially Implemented
+### 🚧 Current Issues
 
-#### File Import/Export
-- [ ] Complete .apkg file parsing and import functionality
-- [ ] URL-based deck import implementation
-- [ ] File upload handling for various formats (.apkg, .json)
-- [ ] Export functionality for decks and collections
+#### APKG Parsing
+- [ ] Field parsing robustness (comma vs pipe delimiters)
+- [ ] Debug logging for field data format analysis
+- [ ] Improved field cleaning and HTML handling
 
 #### Data Persistence
-- [ ] Complete storage layer integration with Svelte stores
-- [ ] Real data loading/saving instead of sample data
-- [ ] Filesystem API implementation for supported browsers
-- [ ] Data migration and backup functionality
+- [ ] Study session state restoration on page reload
+- [ ] Settings default values loading optimization
 
-#### Others
-- [ ] Theme system implementation (light/dark modes)
+### 📋 Planned Features
 
-#### Keyboard shortcuts
-- [ ] up and down / jk for navigating tables
-- [ ] highlight for currently selected table row
-- [ ] escape for going back to higher level view
-- [ ] space for marking correct
-- [ ] f for marking incorrect
-
-
-### 📋 Planned / Not Yet Implemented
-
-#### Advanced Features
-- [ ] Complete plugin system for Extras tab
+#### Advanced Functionality
+- [ ] Complete SRS algorithm implementation
 - [ ] Advanced analytics and reporting
+- [ ] Plugin system for Extras tab
 - [ ] Offline support with service workers
 - [ ] Multi-language support
-- [ ] Collaborative features for deck sharing
 
 #### Performance & Polish
 - [ ] Large deck optimization
-- [ ] Advanced error handling and user feedback
+- [ ] Advanced error handling
 - [ ] Unit and integration testing
-- [ ] Performance monitoring and optimization
-- [ ] Accessibility audit and improvements
+- [ ] Accessibility improvements
 
 ## Technical Architecture
 
@@ -157,17 +134,23 @@ Blonki is a web-based Anki client SPA (Single Page Application) built with Svelt
 ```
 src/
 ├── components/          # Reusable UI components
+│   └── TableNavigation.svelte
+├── services/           # Business logic services
+│   ├── storageService.ts
+│   ├── importService.ts
+│   ├── exportService.ts
+│   ├── themeService.ts
+│   ├── keyboardService.ts
+│   └── apkgParser.ts
 ├── stores/             # Svelte stores for state management
-│   ├── appStore.ts     # Application state and navigation
-│   ├── settingsStore.ts # User preferences and configuration
-│   ├── deckStore.ts    # Deck management
-│   └── cardStore.ts    # Card data and current card state
+│   ├── appStore.ts
+│   ├── settingsStore.ts
+│   ├── deckStore.ts
+│   └── cardStore.ts
 ├── types/              # TypeScript type definitions
-│   └── index.ts        # Core data types and interfaces
+│   └── index.ts
 ├── utils/              # Utility functions
-│   ├── storage.ts      # Storage adapters and persistence
-│   ├── srs.ts          # Spaced repetition algorithms
-│   └── anki.ts         # Anki file handling
+│   └── storage.ts
 ├── views/              # Main application views
 │   ├── LearnView.svelte
 │   ├── EditView.svelte
@@ -180,33 +163,62 @@ src/
 ### Key Technologies
 - **Frontend**: Svelte 5 with TypeScript
 - **Styling**: Tailwind CSS v4 with PostCSS
-- **Build Tool**: Vite
-- **State Management**: Svelte stores
-- **File Handling**: anki-apkg-export library
-- **Storage**: localStorage (primary), Filesystem API (planned)
+- **Build Tool**: Vite with WASM support
+- **State Management**: Svelte stores with persistent state
+- **File Handling**: JSZip, fzstd, sql.js
+- **Storage**: localStorage + Filesystem API
+
+### Dependencies
+```json
+{
+  "sql.js": "^1.8.0",      // SQLite parsing for APKG files
+  "jszip": "^3.10.1",      // ZIP file handling
+  "fzstd": "^0.3.2"        // Zstandard decompression
+}
+```
+
+## Data Flow
+
+### Study Session Persistence
+1. User starts study session → `studySessionStore` updated
+2. Card progress tracked in store (not local variables)
+3. Tab switch → state preserved in store
+4. Return to Learn tab → session restored from store
+5. Study completion → store reset
+
+### Import/Export Flow
+1. File selection → `importService.importFile()`
+2. APKG parsing → `APKGParser.parseAPKG()`
+3. SQLite extraction → `sql.js` with WASM
+4. Data processing → Field parsing and cleaning
+5. Store updates → `storageService.importData()`
+6. UI refresh → Store subscriptions trigger updates
+
+### Storage Abstraction
+1. Service calls → `storageService` methods
+2. Adapter selection → localStorage vs Filesystem API
+3. Data persistence → Adapter-specific implementation
+4. Store synchronization → Automatic store updates
 
 ## Development Notes
 
-### Configuration Challenges Resolved
-- **Tailwind CSS v4 Setup**: Initially had PostCSS configuration issues that were resolved by using the correct `@tailwindcss/postcss` plugin
-- **Mobile Responsiveness**: Implemented proper viewport handling and responsive table containers
-- **ES Module Compatibility**: Fixed `require()` vs `import` syntax issues in configuration files
+### Resolved Challenges
+- **WASM Loading**: Configured Vite for proper sql.js WASM support
+- **Tailwind CSS v4**: Resolved PostCSS configuration issues
+- **State Persistence**: Implemented store-based study session management
+- **APKG Parsing**: SQLite-based parsing with proper field extraction
+- **File System API**: Complete implementation with error handling
 
-### Current Status
-The application is fully functional with a complete UI implementation and working navigation. All core features are implemented with sample data, providing a solid foundation for data persistence and advanced functionality.
-
-### Next Development Priorities
-1. Complete data persistence integration
-2. Implement real .apkg file import/export
-3. Add comprehensive error handling
-4. Implement theme system
-5. Add unit testing framework
+### Current Focus
+- **Field Parsing**: Improving robustness of APKG field extraction
+- **Debug Logging**: Comprehensive logging for parsing analysis
+- **Error Handling**: Better user feedback for import failures
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js (v16 or higher)
-- npm or yarn package manager
+- Modern browser with Filesystem API support (optional)
 
 ### Installation
 ```bash
@@ -215,8 +227,8 @@ npm run dev
 ```
 
 ### Development Server
-The application runs on `http://localhost:5173/` (or next available port) with hot module replacement for development.
+Runs on `http://localhost:5173/` (or next available port) with hot module replacement.
 
 ---
 
-*This document serves as a comprehensive record of the design decisions, implementation progress, and technical architecture for the Blonki web-based Anki client project.*
+*This document provides comprehensive context for the current state of the Blonki project, including architecture, implementation status, and technical details for future development sessions.*

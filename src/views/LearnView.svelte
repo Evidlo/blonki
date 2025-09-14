@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { deckStore, selectedDeckStore } from '../stores/deckStore';
-  import { cardStore, currentCardStore } from '../stores/cardStore';
+  import { cardStore, currentCardStore, studySessionStore } from '../stores/cardStore';
   import { appStore } from '../stores/appStore';
+  import { storageService } from '../services/storageService';
+  import { importService } from '../services/importService';
+  import { exportService } from '../services/exportService';
+  import TableNavigation from '../components/TableNavigation.svelte';
   import type { Deck, Card } from '../types';
 
   let decks: Deck[] = [];
@@ -11,84 +15,95 @@
   let currentCard: Card | null = null;
   let showBack = false;
   let currentCardIndex = 0;
+  let selectedDeckIndex = 0;
+  let isInStudyMode = false;
+  let studySession: any = null;
 
   // Subscribe to stores
   deckStore.subscribe(value => decks = value);
   selectedDeckStore.subscribe(value => selectedDeck = value);
   cardStore.subscribe(value => cards = value);
   currentCardStore.subscribe(value => currentCard = value);
-
-  onMount(() => {
-    loadDecks();
+  studySessionStore.subscribe(value => {
+    studySession = value;
+    isInStudyMode = value.isActive;
+    currentCardIndex = value.currentCardIndex;
+    showBack = value.showBack;
+    
+    // If we're in study mode, load the current card
+    if (value.isActive && cards.length > 0 && value.currentCardIndex < cards.length) {
+      currentCardStore.set(cards[value.currentCardIndex]);
+    }
   });
 
-  async function loadDecks() {
-    // TODO: Load from storage
-    // For now, create some sample data
-    const sampleDecks: Deck[] = [
-      {
-        id: '1',
-        name: 'Spanish Vocabulary',
-        description: 'Basic Spanish words and phrases',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        cardCount: 0
-      },
-      {
-        id: '2',
-        name: 'JavaScript Concepts',
-        description: 'Programming concepts and syntax',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        cardCount: 0
-      }
-    ];
-    deckStore.set(sampleDecks);
-  }
+  onMount(() => {
+    // Data is loaded by storage service initialization in App.svelte
+    // Just subscribe to store changes
+    
+    // Check if there's an active study session to restore
+    if (studySession && studySession.isActive && studySession.deckId) {
+      selectedDeckStore.set(studySession.deckId);
+      loadCardsForDeck(studySession.deckId);
+    }
+    
+    // Listen for keyboard events
+    window.addEventListener('keyboard-correct', handleKeyboardCorrect);
+    window.addEventListener('keyboard-incorrect', handleKeyboardIncorrect);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('keyboard-correct', handleKeyboardCorrect);
+    window.removeEventListener('keyboard-incorrect', handleKeyboardIncorrect);
+  });
 
   function selectDeck(deckId: string) {
     selectedDeckStore.set(deckId);
     loadCardsForDeck(deckId);
+    studySessionStore.set({
+      isActive: true,
+      currentCardIndex: 0,
+      showBack: false,
+      deckId: deckId
+    });
+  }
+
+  function selectDeckByIndex(index: number) {
+    if (index >= 0 && index < decks.length) {
+      selectedDeckIndex = index;
+      selectDeck(decks[index].id);
+    }
+  }
+
+  function handleKeyboardCorrect() {
+    if (currentCard && showBack) {
+      handleResponse('correct');
+    }
+  }
+
+  function handleKeyboardIncorrect() {
+    if (currentCard && showBack) {
+      handleResponse('incorrect');
+    }
   }
 
   async function loadCardsForDeck(deckId: string) {
-    // TODO: Load cards from storage
-    // For now, create some sample cards
-    const sampleCards: Card[] = [
-      {
-        id: '1',
-        front: 'Hello',
-        back: 'Hola',
-        deckId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        interval: 1,
-        repetitions: 0,
-        easeFactor: 2.5,
-        dueDate: new Date()
-      },
-      {
-        id: '2',
-        front: 'Goodbye',
-        back: 'Adiós',
-        deckId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        interval: 1,
-        repetitions: 0,
-        easeFactor: 2.5,
-        dueDate: new Date()
+    try {
+      const deckCards = await storageService.getCardsForDeck(deckId);
+      cardStore.set(deckCards);
+      if (deckCards.length > 0) {
+        currentCardStore.set(deckCards[0]);
+        currentCardIndex = 0;
       }
-    ];
-    cardStore.set(sampleCards);
-    if (sampleCards.length > 0) {
-      currentCardStore.set(sampleCards[0]);
-      currentCardIndex = 0;
+    } catch (error) {
+      console.error('Failed to load cards for deck:', error);
     }
   }
 
   function showCardBack() {
-    showBack = true;
+    studySessionStore.update(session => ({
+      ...session,
+      showBack: true
+    }));
   }
 
   function handleResponse(response: 'correct' | 'incorrect') {
@@ -103,25 +118,107 @@
 
   function nextCard() {
     if (currentCardIndex < cards.length - 1) {
-      currentCardIndex++;
-      currentCardStore.set(cards[currentCardIndex]);
-      showBack = false;
+      const newIndex = currentCardIndex + 1;
+      studySessionStore.update(session => ({
+        ...session,
+        currentCardIndex: newIndex,
+        showBack: false
+      }));
     } else {
       // Finished all cards
-      selectedDeckStore.set(null);
-      currentCardStore.set(null);
-      showBack = false;
+      exitStudyMode();
     }
   }
 
-  function importFromURL() {
-    // TODO: Implement URL import
-    alert('Import from URL - Coming soon!');
+  function exitStudyMode() {
+    selectedDeckStore.set(null);
+    currentCardStore.set(null);
+    studySessionStore.set({
+      isActive: false,
+      currentCardIndex: 0,
+      showBack: false,
+      deckId: null
+    });
   }
 
-  function openFromFile() {
-    // TODO: Implement file import
-    alert('Open from File - Coming soon!');
+  async function importFromURL() {
+    const url = prompt('Enter the URL to import from:');
+    if (!url) return;
+
+    try {
+      const result = await importService.importFromURL(url);
+      if (!result.success) {
+        alert(`Import failed: ${result.message}`);
+      }
+      // Data will be automatically updated via store subscriptions
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async function openFromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.apkg';
+    input.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        const result = await importService.importFile(file);
+        if (!result.success) {
+          alert(`Import failed: ${result.message}`);
+        }
+        // Data will be automatically updated via store subscriptions
+      } catch (error) {
+        console.error('Import failed:', error);
+        alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    };
+    input.click();
+  }
+
+  async function exportDeck(deckId: string) {
+    try {
+      await exportService.exportDeck(deckId);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async function exportAllDecks() {
+    try {
+      await exportService.exportAllDecks();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async function deleteDeck(deckId: string, deckName: string) {
+    if (confirm(`Are you sure you want to delete the deck "${deckName}"? This will also delete all cards in this deck.`)) {
+      try {
+        // First delete all cards in this deck
+        const cardsToDelete = cards.filter(card => card.deckId === deckId);
+        for (const card of cardsToDelete) {
+          await storageService.deleteCard(card.id);
+        }
+        
+        // Then delete the deck
+        await storageService.deleteDeck(deckId);
+        
+        // Reset selection if the deleted deck was selected
+        if (selectedDeck === deckId) {
+          selectedDeck = null;
+          selectedDeckStore.set(null);
+        }
+      } catch (error) {
+        console.error('Delete failed:', error);
+        alert(`Failed to delete deck: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
   }
 </script>
 
@@ -129,7 +226,7 @@
   <!-- Deck Selection View -->
   <div class="space-y-6">
     <div class="flex justify-between items-center">
-      <h2 class="text-xl font-semibold text-gray-900">Select a Deck to Study</h2>
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Select a Deck to Study</h2>
       <div class="flex space-x-2">
         <button
           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -143,6 +240,12 @@
         >
           Open from File
         </button>
+        <button
+          class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+          on:click={exportAllDecks}
+        >
+          Export All
+        </button>
       </div>
     </div>
 
@@ -152,9 +255,8 @@
         <p class="text-sm text-gray-400">Import a deck or create one in the Edit tab</p>
       </div>
     {:else}
-      <div class="bg-white rounded-lg shadow overflow-hidden table-container">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
+      <TableNavigation items={decks} selectedIndex={selectedDeckIndex} onSelect={selectDeckByIndex}>
+          <thead class="bg-gray-200">
             <tr>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Deck Name
@@ -171,8 +273,12 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            {#each decks as deck}
-              <tr class="hover:bg-gray-50">
+          {#each decks as deck, index}
+            <tr 
+              class="hover:bg-gray-200 {selectedDeckIndex === index ? 'selected' : ''}"
+              on:click={() => selectDeck(deck.id)}
+              on:mouseenter={() => selectedDeckIndex = index}
+            >
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {deck.name}
                 </td>
@@ -183,24 +289,51 @@
                   {deck.cardCount}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <div class="flex space-x-2">
                   <button
-                    class="text-blue-600 hover:text-blue-900"
+                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
                     on:click={() => selectDeck(deck.id)}
                   >
                     Study
                   </button>
+                  <button
+                    class="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
+                    on:click={() => exportDeck(deck.id)}
+                  >
+                    Export
+                  </button>
+                  <button
+                    class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                    on:click|stopPropagation={() => deleteDeck(deck.id, deck.name)}
+                    title="Delete deck"
+                  >
+                    Delete
+                  </button>
+                </div>
                 </td>
               </tr>
             {/each}
           </tbody>
-        </table>
-      </div>
+      </TableNavigation>
     {/if}
   </div>
-{:else if currentCard}
+{:else if isInStudyMode && currentCard}
   <!-- Card Review View -->
   <div class="max-w-2xl mx-auto">
     <div class="bg-white rounded-lg shadow-lg p-8">
+      <!-- Back button -->
+      <div class="mb-4">
+        <button
+          class="flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+          on:click={exitStudyMode}
+        >
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Decks
+        </button>
+      </div>
+      
       <!-- Progress indicator -->
       <div class="mb-6">
         <div class="flex justify-between text-sm text-gray-600 mb-2">
