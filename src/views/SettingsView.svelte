@@ -38,23 +38,6 @@
     filesystemSupported = isFilesystemSupported();
   }
 
-  async function createNewFile() {
-    try {
-      await storageService.createNewFile();
-    } catch (error) {
-      console.error('Failed to create new file:', error);
-      alert('Failed to create new file. Please try again.');
-    }
-  }
-
-  async function openFile() {
-    try {
-      await storageService.openFile();
-    } catch (error) {
-      console.error('Failed to open file:', error);
-      alert('Failed to open file. Please try again.');
-    }
-  }
 
   async function downloadBackup() {
     try {
@@ -159,37 +142,24 @@
           <select
             id="storage-type"
             bind:value={settings.storageType}
-            on:change={(e) => updateSetting('storageType', (e.target as HTMLSelectElement).value as 'localStorage' | 'filesystem')}
+            on:change={(e) => updateSetting('storageType', (e.target as HTMLSelectElement).value as 'localStorage' | 'fileSystemAccess')}
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           >
             <option value="localStorage">Browser Local Storage</option>
-            <option value="filesystem" disabled={!filesystemSupported}>
-              Filesystem API {!filesystemSupported ? '(Not Supported)' : ''}
+            <option value="fileSystemAccess" disabled={!filesystemSupported}>
+              File System Access {!filesystemSupported ? '(Not Supported)' : ''}
             </option>
           </select>
           {#if !filesystemSupported}
             <p class="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
-              Filesystem API is not supported in this browser. Using Local Storage instead.
+              File System Access API is not supported in this browser. Using Local Storage instead.
             </p>
-          {:else if settings.storageType === 'filesystem'}
+          {:else if settings.storageType === 'fileSystemAccess'}
             <div class="mt-4 space-y-2">
               <p class="text-sm text-gray-600 dark:text-gray-400">
-                Filesystem storage allows you to save your data to a local file.
+                File System Access allows you to link decks to .apkg files on your disk. 
+                Changes are automatically saved to the linked files.
               </p>
-              <div class="flex space-x-2">
-                <button
-                  class="px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
-                  on:click={createNewFile}
-                >
-                  Create New File
-                </button>
-                <button
-                  class="px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
-                  on:click={openFile}
-                >
-                  Open File
-                </button>
-              </div>
             </div>
           {/if}
         </div>

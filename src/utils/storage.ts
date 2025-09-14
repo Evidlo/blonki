@@ -1,4 +1,5 @@
 import type { StorageAdapter, Deck, Card, Settings, ReviewResult } from '../types';
+import { APKGParser } from '../services/apkgParser';
 
 // Type declarations for Filesystem API
 declare global {
@@ -20,7 +21,7 @@ declare global {
 }
 
 // Local Storage implementation
-class LocalStorageAdapter implements StorageAdapter {
+export class LocalStorageAdapter implements StorageAdapter {
   private prefix = 'blonki_';
 
   private getKey(key: string): string {
@@ -103,255 +104,225 @@ class LocalStorageAdapter implements StorageAdapter {
   }
 }
 
-// Filesystem API implementation (when supported)
-export class FilesystemStorageAdapter implements StorageAdapter {
-  private fileHandle: FileSystemFileHandle | null = null;
-  private dataCache: {
-    decks: Deck[];
-    cards: Card[];
-    settings: Settings;
-    reviewResults: ReviewResult[];
-  } | null = null;
+// File System Access API implementation for .apkg file linking
+export class FileSystemAccessAdapter implements StorageAdapter {
+  private localStorageAdapter: LocalStorageAdapter;
+  private fileHandles: Map<string, FileSystemFileHandle> = new Map(); // deckId -> fileHandle
+  private filePaths: Map<string, string> = new Map(); // deckId -> display path
+  private hasUnsavedChanges: Map<string, boolean> = new Map(); // deckId -> has changes
 
   constructor() {
-    this.loadFromCache();
+    this.localStorageAdapter = new LocalStorageAdapter();
   }
 
-  private async loadFromCache() {
+  // Link a deck to a specific .apkg file
+  async linkDeckToFile(deckId: string, fileHandle: FileSystemFileHandle): Promise<void> {
+    console.log('Linking deck to file:', deckId, fileHandle.name);
+    this.fileHandles.set(deckId, fileHandle);
+    
+    // Try to get the file name for display
     try {
-      const data = await this.loadDataFile();
-      this.dataCache = data;
+      const file = await fileHandle.getFile();
+      // Try to get the full path if available, fallback to filename
+      const fullPath = (file as any).path || file.name;
+      this.filePaths.set(deckId, fullPath);
+      console.log('File path set to:', fullPath);
     } catch (error) {
-      console.warn('Failed to load data from filesystem, using empty cache:', error);
-      this.dataCache = {
-        decks: [],
-        cards: [],
-        settings: this.getDefaultSettings(),
-        reviewResults: []
+      this.filePaths.set(deckId, '[File Permission Error]');
+    }
+  }
+
+  // Unlink a deck from its file
+  unlinkDeckFromFile(deckId: string): void {
+    this.fileHandles.delete(deckId);
+    this.filePaths.delete(deckId);
+  }
+
+  // Get the file path for a deck (for display)
+  getDeckFilePath(deckId: string): string {
+    return this.filePaths.get(deckId) || 'Browser Storage';
+  }
+
+  // Check if a deck is linked to a file
+  isDeckLinkedToFile(deckId: string): boolean {
+    return this.fileHandles.has(deckId);
+  }
+
+  // Save a specific deck to its linked .apkg file
+  async saveDeckToFile(deckId: string, deck: Deck, cards: Card[]): Promise<void> {
+    console.log('saveDeckToFile called for deck:', deckId, 'with', cards.length, 'cards');
+    
+    const fileHandle = this.fileHandles.get(deckId);
+    if (!fileHandle) {
+      throw new Error('Deck is not linked to a file');
+    }
+
+    try {
+      // TODO: Implement proper .apkg file generation using anki-apkg-export or similar
+      // For now, we'll save as JSON with APKG-like structure
+      const data = {
+        deck,
+        cards,
+        exportedAt: new Date().toISOString(),
+        version: '1.0.0',
+        format: 'apkg-export'
       };
+
+      console.log('Writing to file handle:', fileHandle.name);
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(data, null, 2));
+      await writable.close();
+      console.log('Successfully saved deck to file');
+    } catch (error: any) {
+      console.error('Failed to save deck to file:', error);
+      this.filePaths.set(deckId, '[File Permission Error]');
+      throw new Error(`Failed to save deck to file: ${error.message}`);
     }
   }
 
-  private async loadDataFile(): Promise<{
-    decks: Deck[];
-    cards: Card[];
-    settings: Settings;
-    reviewResults: ReviewResult[];
-  }> {
-    if (!this.fileHandle) {
-      throw new Error('No file handle available');
+  // Load a deck from a .apkg file
+  async loadDeckFromFile(fileHandle: FileSystemFileHandle): Promise<{ deck: Deck; cards: Card[] }> {
+    try {
+      const file = await fileHandle.getFile();
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Try to parse as .apkg file first
+      try {
+        const parser = new APKGParser();
+        const apkgData = await parser.parseAPKG(arrayBuffer);
+        
+        // For File System Access, we'll take the first deck and its cards
+        // In the future, we might want to handle multiple decks
+        if (apkgData.decks.length === 0) {
+          throw new Error('No decks found in APKG file');
+        }
+        
+        const deck = apkgData.decks[0];
+        const cards = apkgData.cards.filter(card => card.deckId === deck.id);
+        
+        // If the deck name is generic, use the filename
+        if (deck.name === 'Imported Deck' || deck.name === 'Default') {
+          const fileName = file.name.replace('.apkg', '');
+          deck.name = fileName;
+        }
+        
+        return { deck, cards };
+      } catch (apkgError) {
+        // If APKG parsing fails, try JSON fallback
+        console.warn('APKG parsing failed, trying JSON fallback:', apkgError);
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          return {
+            deck: data.deck,
+            cards: data.cards || []
+          };
+        } catch (jsonError) {
+          throw new Error(`Failed to parse file as APKG or JSON: ${apkgError instanceof Error ? apkgError.message : 'Unknown error'}`);
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to load deck from file:', error);
+      throw new Error(`Failed to load deck from file: ${error.message}`);
     }
-
-    const file = await this.fileHandle.getFile();
-    const text = await file.text();
-    const data = JSON.parse(text);
-
-    // Convert date strings back to Date objects
-    return {
-      decks: data.decks?.map((deck: any) => ({
-        ...deck,
-        createdAt: new Date(deck.createdAt),
-        updatedAt: new Date(deck.updatedAt)
-      })) || [],
-      cards: data.cards?.map((card: any) => ({
-        ...card,
-        createdAt: new Date(card.createdAt),
-        updatedAt: new Date(card.updatedAt),
-        dueDate: new Date(card.dueDate),
-        lastReviewed: card.lastReviewed ? new Date(card.lastReviewed) : undefined
-      })) || [],
-      settings: data.settings || this.getDefaultSettings(),
-      reviewResults: data.reviewResults?.map((result: any) => ({
-        ...result,
-        timestamp: new Date(result.timestamp)
-      })) || []
-    };
   }
 
-  private async saveDataFile(data: {
-    decks: Deck[];
-    cards: Card[];
-    settings: Settings;
-    reviewResults: ReviewResult[];
-  }): Promise<void> {
-    if (!this.fileHandle) {
-      throw new Error('No file handle available');
-    }
-
-    const writable = await this.fileHandle.createWritable();
-    await writable.write(JSON.stringify(data, null, 2));
-    await writable.close();
-    
-    this.dataCache = data;
-  }
-
+  // StorageAdapter interface implementation
   async saveDecks(decks: Deck[]): Promise<void> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
+    console.log('FileSystemAccessAdapter.saveDecks called with', decks.length, 'decks');
+    console.log('Deck IDs:', decks.map(d => d.id));
     
-    if (this.dataCache) {
-      this.dataCache.decks = decks;
-      await this.saveDataFile(this.dataCache);
-    }
+    // Save all decks to localStorage as fallback
+    await this.localStorageAdapter.saveDecks(decks);
+    console.log('Decks saved to localStorage');
+    
+    // Note: We don't save to file here to avoid permission dialogs on initial load
+    // File saving will happen in saveCards when user makes actual edits
   }
 
   async loadDecks(): Promise<Deck[]> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
+    const decks = await this.localStorageAdapter.loadDecks();
     
-    return this.dataCache?.decks || [];
+    // Update file paths for linked decks
+    return decks.map(deck => ({
+      ...deck,
+      filePath: this.getDeckFilePath(deck.id),
+      isLinkedToFile: this.isDeckLinkedToFile(deck.id)
+    }));
   }
 
   async saveCards(cards: Card[]): Promise<void> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
+    console.log('FileSystemAccessAdapter.saveCards called with', cards.length, 'cards');
+    console.log('Available file handles:', Array.from(this.fileHandles.keys()));
     
-    if (this.dataCache) {
-      this.dataCache.cards = cards;
-      await this.saveDataFile(this.dataCache);
+    // Save all cards to localStorage as fallback
+    await this.localStorageAdapter.saveCards(cards);
+    
+    // Mark decks as having unsaved changes and save to file
+    const deckIds = new Set(cards.map(card => card.deckId));
+    console.log('Deck IDs from cards:', Array.from(deckIds));
+    
+    for (const deckId of deckIds) {
+      console.log(`Checking deck ${deckId}: has file handle = ${this.fileHandles.has(deckId)}`);
+      if (this.fileHandles.has(deckId)) {
+        // Mark as having unsaved changes
+        this.hasUnsavedChanges.set(deckId, true);
+        
+        console.log('Saving cards for linked deck:', deckId);
+        const deck = (await this.localStorageAdapter.loadDecks()).find(d => d.id === deckId);
+        if (deck) {
+          const deckCards = cards.filter(card => card.deckId === deckId);
+          await this.saveDeckToFile(deckId, deck, deckCards);
+          // Mark as saved after successful save
+          this.hasUnsavedChanges.set(deckId, false);
+        } else {
+          console.log('Deck not found in localStorage:', deckId);
+        }
+      } else {
+        console.log('No file handle for deck:', deckId);
+      }
     }
   }
 
   async loadCards(): Promise<Card[]> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
-    
-    return this.dataCache?.cards || [];
+    return await this.localStorageAdapter.loadCards();
   }
 
   async saveSettings(settings: Settings): Promise<void> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
-    
-    if (this.dataCache) {
-      this.dataCache.settings = settings;
-      await this.saveDataFile(this.dataCache);
-    }
+    await this.localStorageAdapter.saveSettings(settings);
   }
 
   async loadSettings(): Promise<Settings> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
-    
-    return this.dataCache?.settings || this.getDefaultSettings();
+    return await this.localStorageAdapter.loadSettings();
   }
 
   async saveReviewResults(results: ReviewResult[]): Promise<void> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
-    
-    if (this.dataCache) {
-      this.dataCache.reviewResults = results;
-      await this.saveDataFile(this.dataCache);
-    }
+    await this.localStorageAdapter.saveReviewResults(results);
   }
 
   async loadReviewResults(): Promise<ReviewResult[]> {
-    if (!this.dataCache) {
-      await this.loadFromCache();
-    }
-    
-    return this.dataCache?.reviewResults || [];
+    return await this.localStorageAdapter.loadReviewResults();
   }
 
-  private getDefaultSettings(): Settings {
-    return {
-      storageType: 'filesystem',
-      srsAlgorithm: 'sm2',
-      sm2InitialInterval: 1,
-      sm2EasyInterval: 4,
-      sm2MinInterval: 1,
-      sm2MaxInterval: 36500,
-      theme: 'auto',
-      cardsPerSession: 20
-    };
-  }
-
-  // Method to set the file handle (called when user selects a file)
-  setFileHandle(fileHandle: FileSystemFileHandle) {
-    this.fileHandle = fileHandle;
-  }
-
-  // Method to create a new file
-  async createNewFile(): Promise<void> {
-    try {
-      const fileHandle = await window.showSaveFilePicker?.({
-        types: [{
-          description: 'Blonki data file',
-          accept: {
-            'application/json': ['.blonki']
-          }
-        }]
-      });
-      
-      if (!fileHandle) {
-        throw new Error('File picker was cancelled');
-      }
-      
-      this.fileHandle = fileHandle;
-      
-      // Initialize with empty data
-      this.dataCache = {
-        decks: [],
-        cards: [],
-        settings: this.getDefaultSettings(),
-        reviewResults: []
-      };
-      
-      await this.saveDataFile(this.dataCache);
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        throw error;
-      }
-    }
-  }
-
-  // Method to open an existing file
-  async openFile(): Promise<void> {
-    try {
-      const fileHandles = await window.showOpenFilePicker?.({
-        types: [{
-          description: 'Blonki data file',
-          accept: {
-            'application/json': ['.blonki']
-          }
-        }]
-      });
-      
-      if (!fileHandles || fileHandles.length === 0) {
-        throw new Error('File picker was cancelled');
-      }
-      
-      this.fileHandle = fileHandles[0];
-      await this.loadFromCache();
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        throw error;
-      }
-    }
+  // Method to save cards only to localStorage without triggering file saves
+  async saveCardsToLocalStorageOnly(cards: Card[]): Promise<void> {
+    await this.localStorageAdapter.saveCards(cards);
   }
 }
 
 // Storage factory
-export function createStorageAdapter(type: 'localStorage' | 'filesystem'): StorageAdapter {
+export function createStorageAdapter(type: 'localStorage' | 'fileSystemAccess'): StorageAdapter {
   switch (type) {
     case 'localStorage':
       return new LocalStorageAdapter();
-    case 'filesystem':
-      return new FilesystemStorageAdapter();
+    case 'fileSystemAccess':
+      return new FileSystemAccessAdapter();
     default:
       throw new Error(`Unknown storage type: ${type}`);
   }
 }
 
-// Check if Filesystem API is supported
+// Check if File System Access API is supported
 export function isFilesystemSupported(): boolean {
   return 'showOpenFilePicker' in window;
 }

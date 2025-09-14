@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { deckStore, selectedDeckStore } from '../stores/deckStore';
   import { cardStore, currentCardStore, studySessionStore } from '../stores/cardStore';
   import { appStore } from '../stores/appStore';
+  import { settingsStore } from '../stores/settingsStore';
   import { storageService } from '../services/storageService';
   import { importService } from '../services/importService';
   import { exportService } from '../services/exportService';
@@ -131,8 +133,8 @@
   }
 
   function exitStudyMode() {
-    selectedDeckStore.set(null);
-    currentCardStore.set(null);
+      selectedDeckStore.set(null);
+      currentCardStore.set(null);
     studySessionStore.set({
       isActive: false,
       currentCardIndex: 0,
@@ -141,6 +143,10 @@
     });
   }
 
+  // TODO: Import from URL functionality needs to be redesigned for File System Access mode
+  // The user flow needs to be thought through for how to handle downloaded .apkg files
+  // when File System Access is selected (where to save them, etc.)
+  /*
   async function importFromURL() {
     const url = prompt('Enter the URL to import from:');
     if (!url) return;
@@ -156,27 +162,91 @@
       alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+  */
 
   async function openFromFile() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,.apkg';
-    input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (!file) return;
+    try {
+      // Check if File System Access API is supported
+      if (!('showOpenFilePicker' in window)) {
+        // Fallback to traditional file input
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.apkg';
+        input.onchange = async (event) => {
+          const file = (event.target as HTMLInputElement).files?.[0];
+          if (!file) return;
 
-      try {
+          try {
+            const result = await importService.importFile(file);
+            if (!result.success) {
+              alert(`Import failed: ${result.message}`);
+            }
+            // Data will be automatically updated via store subscriptions
+          } catch (error) {
+            console.error('Import failed:', error);
+            alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        };
+        input.click();
+        return;
+      }
+
+      // Use File System Access API
+      const fileHandles = await window.showOpenFilePicker?.({
+        types: [{
+          description: 'Anki Package files',
+          accept: {
+            'application/zip': ['.apkg']
+          }
+        }],
+        multiple: false
+      });
+
+      if (!fileHandles || fileHandles.length === 0) {
+        return; // User cancelled
+      }
+
+      const fileHandle = fileHandles[0];
+      
+      // Check current storage type
+      const settings = get(settingsStore);
+      if (settings.storageType === 'fileSystemAccess') {
+        // Load deck from file and link it
+        const { deck, cards } = await storageService.loadDeckFromFile(fileHandle);
+        console.log('Loaded deck with ID:', deck.id);
+        
+        // Link the deck to the file
+        await storageService.linkDeckToFile(deck.id, fileHandle);
+        
+        // Update deck with file linking properties
+        const linkedDeck = {
+          ...deck,
+          isLinkedToFile: true,
+          filePath: storageService.getDeckFilePath(deck.id)
+        };
+        
+        // Add deck and cards using storage service to ensure they're saved to localStorage
+        const currentDecks = get(deckStore);
+        const currentCards = get(cardStore);
+        
+        // Save the new deck and cards through storage service
+        await storageService.saveDecks([...currentDecks, linkedDeck]);
+        // Only save cards to localStorage initially, not to file (avoids permission dialog)
+        await storageService.saveCardsToLocalStorageOnly([...currentCards, ...cards]);
+      } else {
+        // Traditional import (localStorage mode)
+        const file = await fileHandle.getFile();
         const result = await importService.importFile(file);
         if (!result.success) {
           alert(`Import failed: ${result.message}`);
         }
-        // Data will be automatically updated via store subscriptions
-      } catch (error) {
-        console.error('Import failed:', error);
-        alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-    };
-    input.click();
+    } catch (error) {
+      console.error('Failed to open file:', error);
+      if (error instanceof Error && error.name !== 'AbortError') {
+        alert(`Failed to open file: ${error.message}`);
+      }
+    }
   }
 
   async function exportDeck(deckId: string) {
@@ -228,12 +298,15 @@
     <div class="flex justify-between items-center">
       <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Select a Deck to Study</h2>
       <div class="flex space-x-2">
+        <!-- TODO: Import from URL functionality commented out - needs redesign for File System Access mode -->
+        <!--
         <button
           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           on:click={importFromURL}
         >
           Import from URL
         </button>
+        -->
         <button
           class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
           on:click={openFromFile}
@@ -262,7 +335,7 @@
                 Deck Name
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Description
+                Location
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Cards
@@ -283,7 +356,7 @@
                   {deck.name}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {deck.description || 'No description'}
+                  {deck.filePath || 'Browser Storage'}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {deck.cardCount}
@@ -298,7 +371,7 @@
                   </button>
                   <button
                     class="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
-                    on:click={() => exportDeck(deck.id)}
+                    on:click|stopPropagation={() => exportDeck(deck.id)}
                   >
                     Export
                   </button>

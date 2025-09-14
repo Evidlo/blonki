@@ -1,44 +1,68 @@
-import { FilesystemStorageAdapter, isFilesystemSupported } from '../utils/storage';
+import { FileSystemAccessAdapter, LocalStorageAdapter, isFilesystemSupported } from '../utils/storage';
 import { get } from 'svelte/store';
 import { appStore } from '../stores/appStore';
 import { settingsStore } from '../stores/settingsStore';
 import { deckStore } from '../stores/deckStore';
 import { cardStore } from '../stores/cardStore';
+import type { Card } from '../types';
 
 class StorageService {
-  private adapter: FilesystemStorageAdapter | null = null;
+  private adapter: FileSystemAccessAdapter | null = null;
+  private localStorageAdapter: LocalStorageAdapter;
+
+  constructor() {
+    this.localStorageAdapter = new LocalStorageAdapter();
+  }
 
   async initialize() {
-    if (isFilesystemSupported()) {
-      this.adapter = new FilesystemStorageAdapter();
+    // Load settings directly from localStorage to determine storage type
+    const settings = await this.localStorageAdapter.loadSettings();
+    settingsStore.set(settings);
+    
+    // Create adapter based on current storage type
+    if (settings.storageType === 'fileSystemAccess' && isFilesystemSupported()) {
+      this.adapter = new FileSystemAccessAdapter();
     }
     
-    // Load initial data
-    await this.loadSettings();
+    // Load initial data using the appropriate adapter
     await this.loadDecks();
     await this.loadCards();
   }
 
-  // Filesystem API methods
-  async createNewFile() {
+  // File System Access API methods
+  async linkDeckToFile(deckId: string, fileHandle: FileSystemFileHandle) {
     if (!this.adapter) {
-      throw new Error('Filesystem API not supported');
+      throw new Error('File System Access API not supported');
     }
-    return await this.adapter.createNewFile();
+    return await this.adapter.linkDeckToFile(deckId, fileHandle);
   }
 
-  async openFile() {
+  async unlinkDeckFromFile(deckId: string) {
     if (!this.adapter) {
-      throw new Error('Filesystem API not supported');
+      throw new Error('File System Access API not supported');
     }
-    return await this.adapter.openFile();
+    this.adapter.unlinkDeckFromFile(deckId);
   }
 
-  async setFileHandle(handle: FileSystemFileHandle) {
+  getDeckFilePath(deckId: string): string {
     if (!this.adapter) {
-      throw new Error('Filesystem API not supported');
+      return 'Browser Storage';
     }
-    this.adapter.setFileHandle(handle);
+    return this.adapter.getDeckFilePath(deckId);
+  }
+
+  isDeckLinkedToFile(deckId: string): boolean {
+    if (!this.adapter) {
+      return false;
+    }
+    return this.adapter.isDeckLinkedToFile(deckId);
+  }
+
+  async loadDeckFromFile(fileHandle: FileSystemFileHandle) {
+    if (!this.adapter) {
+      throw new Error('File System Access API not supported');
+    }
+    return await this.adapter.loadDeckFromFile(fileHandle);
   }
 
   // Data management methods
@@ -54,13 +78,13 @@ class StorageService {
 
   async importData(data: any) {
     if (data.decks) {
-      deckStore.set(data.decks);
+      await this.saveDecks(data.decks);
     }
     if (data.cards) {
-      cardStore.set(data.cards);
+      await this.saveCards(data.cards);
     }
     if (data.settings) {
-      settingsStore.set(data.settings);
+      await this.saveSettings(data.settings);
     }
   }
 
@@ -109,19 +133,34 @@ class StorageService {
     if (this.adapter) {
       const settings = await this.adapter.loadSettings();
       settingsStore.set(settings);
+    } else {
+      const settings = await this.localStorageAdapter.loadSettings();
+      settingsStore.set(settings);
     }
   }
 
   async saveSettings(settings: any) {
     if (this.adapter) {
       await this.adapter.saveSettings(settings);
+    } else {
+      await this.localStorageAdapter.saveSettings(settings);
     }
     settingsStore.set(settings);
+    
+    // Recreate adapter if storage type changed
+    if (settings.storageType === 'fileSystemAccess' && isFilesystemSupported() && !this.adapter) {
+      this.adapter = new FileSystemAccessAdapter();
+    } else if (settings.storageType === 'localStorage' && this.adapter) {
+      this.adapter = null;
+    }
   }
 
   async loadDecks() {
     if (this.adapter) {
       const decks = await this.adapter.loadDecks();
+      deckStore.set(decks);
+    } else {
+      const decks = await this.localStorageAdapter.loadDecks();
       deckStore.set(decks);
     }
   }
@@ -129,6 +168,8 @@ class StorageService {
   async saveDecks(decks: any[]) {
     if (this.adapter) {
       await this.adapter.saveDecks(decks);
+    } else {
+      await this.localStorageAdapter.saveDecks(decks);
     }
     deckStore.set(decks);
   }
@@ -137,12 +178,17 @@ class StorageService {
     if (this.adapter) {
       const cards = await this.adapter.loadCards();
       cardStore.set(cards);
+    } else {
+      const cards = await this.localStorageAdapter.loadCards();
+      cardStore.set(cards);
     }
   }
 
   async saveCards(cards: any[]) {
     if (this.adapter) {
       await this.adapter.saveCards(cards);
+    } else {
+      await this.localStorageAdapter.saveCards(cards);
     }
     cardStore.set(cards);
   }
@@ -183,6 +229,11 @@ class StorageService {
     const decks = get(deckStore);
     const cards = get(cardStore);
     
+    // If this is a linked deck in File System Access mode, unlink it first
+    if (this.adapter && this.isDeckLinkedToFile(deckId)) {
+      this.unlinkDeckFromFile(deckId);
+    }
+    
     // Delete all cards in this deck
     const filteredCards = cards.filter(c => c.deckId !== deckId);
     await this.saveCards(filteredCards);
@@ -197,16 +248,26 @@ class StorageService {
     return cards.filter(card => card.deckId === deckId);
   }
 
-  private getDefaultSettings() {
-    if (this.adapter) {
-      return this.adapter.getDefaultSettings();
+  // Method to save cards only to localStorage without triggering file saves
+  async saveCardsToLocalStorageOnly(cards: Card[]) {
+    if (this.adapter && 'saveCardsToLocalStorageOnly' in this.adapter) {
+      await (this.adapter as any).saveCardsToLocalStorageOnly(cards);
+    } else {
+      await this.localStorageAdapter.saveCards(cards);
     }
+    cardStore.set(cards);
+  }
+
+  private getDefaultSettings() {
     return {
-      theme: 'light',
-      language: 'en',
-      reviewMode: 'spaced-repetition',
-      newCardsPerDay: 20,
-      reviewCardsPerDay: 100
+      storageType: 'localStorage' as const,
+      srsAlgorithm: 'sm2' as const,
+      sm2InitialInterval: 1,
+      sm2EasyInterval: 4,
+      sm2MinInterval: 1,
+      sm2MaxInterval: 36500,
+      theme: 'auto' as const,
+      cardsPerSession: 20
     };
   }
 }

@@ -78,7 +78,28 @@ class ImportService {
 
   async importAPKG(file: File, mergeWithExisting = false): Promise<ImportResult> {
     try {
+      // Validate file size
+      if (file.size === 0) {
+        throw new Error('File is empty');
+      }
+      
+      // Check file extension
+      if (!file.name.toLowerCase().endsWith('.apkg')) {
+        throw new Error('File does not have .apkg extension');
+      }
+      
       const arrayBuffer = await file.arrayBuffer();
+      
+      // Basic ZIP file validation - check for ZIP signature
+      const uint8Array = new Uint8Array(arrayBuffer);
+      if (uint8Array.length < 4 || 
+          uint8Array[0] !== 0x50 || 
+          uint8Array[1] !== 0x4B || 
+          (uint8Array[2] !== 0x03 && uint8Array[2] !== 0x05 && uint8Array[2] !== 0x07) ||
+          (uint8Array[3] !== 0x04 && uint8Array[3] !== 0x06 && uint8Array[3] !== 0x08)) {
+        throw new Error('File does not appear to be a valid ZIP/APKG file');
+      }
+      
       const data = await apkgParser.parseAPKG(arrayBuffer);
       
       // If deck name is still "Imported Deck", use filename as fallback

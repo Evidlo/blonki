@@ -169,7 +169,7 @@
               Deck Name
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Description
+              Location
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Cards
@@ -190,7 +190,7 @@
                 {deck.name}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {deck.description || 'No description'}
+                {deck.filePath || 'Browser Storage'}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {deck.cardCount}
@@ -205,7 +205,7 @@
                   </button>
                   <button
                     class="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
-                    on:click={() => exportDeck(deck.id)}
+                    on:click|stopPropagation={() => exportDeck(deck.id)}
                   >
                     Export
                   </button>

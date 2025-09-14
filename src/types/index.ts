@@ -21,6 +21,10 @@ export interface Deck {
   createdAt: Date;
   updatedAt: Date;
   cardCount: number;
+  // File System Access properties
+  fileHandle?: FileSystemFileHandle;
+  isLinkedToFile: boolean;
+  filePath?: string; // Display path for UI
 }
 
 export interface ReviewResult {
@@ -40,7 +44,7 @@ export interface AppState {
 
 // Settings types
 export interface Settings {
-  storageType: 'localStorage' | 'filesystem';
+  storageType: 'localStorage' | 'fileSystemAccess';
   srsAlgorithm: 'sm2' | 'sm17' | 'custom';
   // SM2 parameters
   sm2InitialInterval: number;
