@@ -99,25 +99,11 @@ export class APKGParser {
           
           console.log(`Found ${values.length} notes`);
           
-          // Debug: Print first few raw field strings
-          console.log('=== DEBUG: Raw field data samples ===');
-          for (let i = 0; i < Math.min(3, values.length); i++) {
-            const fieldsData = values[i][0] as string;
-            console.log(`Note ${i + 1} raw fields:`, JSON.stringify(fieldsData));
-            console.log(`Note ${i + 1} length:`, fieldsData.length);
-            console.log(`Note ${i + 1} contains pipe:`, fieldsData.includes('|'));
-            console.log(`Note ${i + 1} contains comma:`, fieldsData.includes(','));
-            console.log('---');
-          }
-          console.log('=== END DEBUG ===');
-          
           for (const row of values) {
             const fieldsData = row[0] as string;
             
-            // Parse the fields string (usually pipe-separated in Anki)
+            // Parse the fields string using Unicode unit separator (U+001F)
             const fields = this.parseFieldsString(fieldsData);
-            
-            console.log(`Parsed fields for note:`, fields);
             
             if (fields.length >= 2) {
               const card: Card = {
@@ -133,7 +119,6 @@ export class APKGParser {
                 dueDate: now
               };
               
-              console.log(`Created card - Front: "${card.front}", Back: "${card.back}"`);
               cards.push(card);
             }
           }
@@ -186,16 +171,18 @@ export class APKGParser {
   }
 
   private parseFieldsString(fieldsData: string): string[] {
-    console.log(`Parsing fields string: "${fieldsData}"`);
+    // Anki stores fields separated by Unicode unit separator (U+001F)
+    const unitSeparator = '\x1F';
     
-    // Anki typically stores fields as pipe-separated values
-    // But we need to be careful about escaped characters
+    // Try Unicode unit separator first (most common in Anki)
+    if (fieldsData.includes(unitSeparator)) {
+      const fields = fieldsData.split(unitSeparator);
+      return fields.map(field => this.cleanField(field));
+    }
     
-    // Try pipe-separated first (most common in Anki)
+    // Fallback to pipe-separated (older Anki versions)
     if (fieldsData.includes('|')) {
-      // Split by pipe, but be careful about escaped pipes
       const fields = fieldsData.split('|');
-      console.log(`Split by pipe:`, fields);
       return fields.map(field => this.cleanField(field));
     }
     
@@ -203,33 +190,21 @@ export class APKGParser {
     try {
       const parsed = JSON.parse(fieldsData);
       if (Array.isArray(parsed)) {
-        console.log(`Parsed as JSON array:`, parsed);
         return parsed.map(field => this.cleanField(field));
       }
     } catch (e) {
-      console.log(`Not JSON format`);
-    }
-    
-    // Try comma-separated (but this is risky as content might contain commas)
-    if (fieldsData.includes(',')) {
-      console.log(`Trying comma separation (risky)`);
-      const fields = fieldsData.split(',');
-      console.log(`Split by comma:`, fields);
-      return fields.map(field => this.cleanField(field));
+      // Not JSON format
     }
     
     // Single field
-    console.log(`Single field detected`);
     return [this.cleanField(fieldsData)];
   }
 
   private cleanField(field: string): string {
     if (!field) return '';
     
-    console.log(`Cleaning field: "${field}"`);
-    
     // Remove SQL escaping and quotes
-    let cleaned = field
+    return field
       .replace(/^'|'$/g, '') // Remove surrounding quotes
       .replace(/''/g, "'") // Unescape single quotes
       .replace(/\\n/g, '\n') // Unescape newlines
@@ -237,9 +212,6 @@ export class APKGParser {
       .replace(/\\r/g, '\r') // Unescape carriage returns
       .replace(/\\\\/g, '\\') // Unescape backslashes
       .trim();
-    
-    console.log(`Cleaned field: "${cleaned}"`);
-    return cleaned;
   }
 
   private cleanHtml(html: string): string {
