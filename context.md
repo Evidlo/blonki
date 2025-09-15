@@ -10,7 +10,7 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - **Five main tabs**: Learn, Edit, Stats, Settings, Extras
 - **Responsive design**: Centered column layout optimized for desktop and mobile
 - **Navigation**: Tab-based with persistent back button and ESC key support
-- **Data storage**: Dual storage system (localStorage + Filesystem API)
+- **Data storage**: Dual storage system (localStorage + File System Access API)
 - **Theme system**: Light/dark mode with automatic detection
 
 ### State Management Architecture
@@ -25,7 +25,7 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 #### Storage Abstraction Layer
 - **`StorageAdapter` interface**: Unified storage operations
 - **`LocalStorageAdapter`**: Browser localStorage implementation
-- **`FilesystemStorageAdapter`**: File system API implementation
+- **`FileSystemAccessAdapter`**: File System Access API implementation for transparent file operations
 - **`StorageService`**: Centralized service managing all storage operations
 
 ### Service Layer
@@ -89,10 +89,9 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] Real-time data persistence
 
 #### Settings Tab
-- [x] Storage type selection (localStorage/Filesystem API)
+- [x] Storage type selection (localStorage/File System Access API)
 - [x] SRS algorithm configuration
 - [x] Theme selection and persistence
-- [x] File management (create new, open existing)
 - [x] Data management (backup, restore, migrate, clear)
 - [x] Default values loading
 
@@ -113,6 +112,77 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [ ] Study session state restoration on page reload
 - [ ] Settings default values loading optimization
 
+## File System Access API Design Guidelines
+
+### Core Design Principles
+
+#### 1. Transparent File Operations
+- **Intent**: When "File System Access" storage type is selected, individual `.apkg` files are linked to specific paths on the user's disk
+- **Behavior**: Any edits made to a deck are automatically saved back to its linked `.apkg` file
+- **User Experience**: Seamless file-based workflow without explicit save operations
+
+#### 2. Permission Management
+- **Deferred Permissions**: File System Access API permission dialogs are deferred until the user performs a save operation after an edit
+- **No Premature Prompts**: Opening a deck should not trigger permission dialogs
+- **User Control**: Permissions only requested when user actually modifies data
+
+#### 3. File Linking and State Management
+- **Deck Linking**: Each deck can be linked to a `FileSystemFileHandle` for persistent storage
+- **Location Display**: "Location" column shows full file path for linked decks, "Browser Storage" for unlinked decks
+- **Error Handling**: File permission errors display as `[File Permission Error]` in Location column
+- **Unlinking**: Deleting a deck unlinks it from the file before deletion to avoid permission dialogs
+
+#### 4. Storage Adapter Pattern
+- **`FileSystemAccessAdapter`**: Implements `StorageAdapter` interface for file-based operations
+- **Hybrid Storage**: Uses `localStorage` as fallback and for unlinked decks
+- **Change Tracking**: `hasUnsavedChanges` Map tracks which decks have been modified
+- **Selective Saving**: Only saves to linked files when changes are detected
+
+### Implementation Details
+
+#### File Operations
+```typescript
+// Core file operations in FileSystemAccessAdapter
+- linkDeckToFile(deckId: string, fileHandle: FileSystemFileHandle): void
+- unlinkDeckFromFile(deckId: string): void
+- getDeckFilePath(deckId: string): string
+- isDeckLinkedToFile(deckId: string): boolean
+- saveDeckToFile(deckId: string, deck: Deck, cards: Card[]): Promise<void>
+- loadDeckFromFile(fileHandle: FileSystemFileHandle): Promise<{decks: Deck[], cards: Card[]}>
+```
+
+#### Data Flow
+1. **File Opening**: User selects "Open from File" → File System Access API → Parse APKG → Link deck to file
+2. **Editing**: User modifies card → `hasUnsavedChanges` flag set → Save to localStorage + linked file
+3. **Deletion**: User deletes deck → Unlink from file → Delete from localStorage
+4. **Permission Handling**: File write operations trigger permission dialogs only when needed
+
+#### UI/UX Guidelines
+- **Location Column**: Replaces "Description" column in all deck views
+- **File Path Display**: Shows full path for linked decks, "Browser Storage" for unlinked
+- **Error States**: Clear indication of file permission errors
+- **Tab Independence**: Each tab resets `selectedDeck` state on mount to prevent cross-tab interference
+
+#### Supported File Formats
+- **Primary**: `.apkg` files (Anki package format)
+- **Future**: Potential support for other formats
+- **Validation**: ZIP file signature validation and file extension checking
+- **Error Handling**: Comprehensive validation with user-friendly error messages
+
+### Technical Architecture
+
+#### Storage Service Integration
+- **Centralized Management**: `StorageService` coordinates between `LocalStorageAdapter` and `FileSystemAccessAdapter`
+- **Conditional Initialization**: `FileSystemAccessAdapter` only created when File System Access storage type is selected
+- **Fallback Strategy**: Always maintains `localStorage` as backup storage
+- **State Synchronization**: Svelte stores updated through centralized service calls
+
+#### APKG Processing
+- **Parser Integration**: `APKGParser` used for both File System Access and traditional import
+- **File Validation**: ZIP signature validation, file size checks, extension verification
+- **Error Recovery**: Graceful fallback to JSON parsing if APKG parsing fails
+- **Deck Naming**: Uses filename (without extension) when parsed deck name is generic
+
 ### 📋 Planned Features
 
 #### Advanced Functionality
@@ -127,6 +197,13 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [ ] Advanced error handling
 - [ ] Unit and integration testing
 - [ ] Accessibility improvements
+
+#### Future Data Model Evolution
+- [ ] **Multiple Card Formats Support**: Eventually support Anki's full data model (Notes, Cards, Templates, Fields)
+- [ ] **Current Approach**: Maintain simplified card structure (front/back) as common denominator
+- [ ] **Design Rationale**: Focus on core features while keeping data model simple and extensible
+- [ ] **Migration Path**: When ready, can evolve to full Anki data model without breaking existing functionality
+- [ ] **APKG Compatibility**: Generate proper APKG files that work with Anki while using simplified internal structure
 
 ## Technical Architecture
 
@@ -166,7 +243,7 @@ src/
 - **Build Tool**: Vite with WASM support
 - **State Management**: Svelte stores with persistent state
 - **File Handling**: JSZip, fzstd, sql.js
-- **Storage**: localStorage + Filesystem API
+- **Storage**: localStorage + File System Access API
 
 ### Dependencies
 ```json
@@ -196,7 +273,7 @@ src/
 
 ### Storage Abstraction
 1. Service calls → `storageService` methods
-2. Adapter selection → localStorage vs Filesystem API
+2. Adapter selection → localStorage vs File System Access API
 3. Data persistence → Adapter-specific implementation
 4. Store synchronization → Automatic store updates
 
@@ -207,7 +284,10 @@ src/
 - **Tailwind CSS v4**: Resolved PostCSS configuration issues
 - **State Persistence**: Implemented store-based study session management
 - **APKG Parsing**: SQLite-based parsing with proper field extraction
-- **File System API**: Complete implementation with error handling
+- **File System Access API**: Complete implementation with transparent file operations
+- **Permission Management**: Deferred permission dialogs until actual file modifications
+- **Tab State Isolation**: Fixed cross-tab state sharing issues
+- **Event Handling**: Resolved button event bubbling issues
 
 ### Current Focus
 - **Field Parsing**: Improving robustness of APKG field extraction
@@ -218,7 +298,7 @@ src/
 
 ### Prerequisites
 - Node.js (v16 or higher)
-- Modern browser with Filesystem API support (optional)
+- Modern browser with File System Access API support (optional, for file-based storage)
 
 ### Installation
 ```bash

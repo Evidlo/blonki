@@ -1,5 +1,5 @@
 import { storageService } from './storageService';
-import { apkgParser } from './apkgParser';
+import { apkgParser } from './apkgFormat';
 import type { Deck, Card } from '../types';
 
 export interface ImportResult {
@@ -90,13 +90,18 @@ class ImportService {
       
       const arrayBuffer = await file.arrayBuffer();
       
-      // Basic ZIP file validation - check for ZIP signature
+      // Debug: Log file info
+      console.log('Browser Storage - File name:', file.name);
+      console.log('Browser Storage - File size:', file.size);
+      console.log('Browser Storage - File type:', file.type);
+      console.log('Browser Storage - ArrayBuffer size:', arrayBuffer.byteLength);
+      console.log('Browser Storage - First 16 bytes:', Array.from(new Uint8Array(arrayBuffer.slice(0, 16))));
+      
+      // Basic ZIP file validation - check for ZIP signature (PK)
       const uint8Array = new Uint8Array(arrayBuffer);
       if (uint8Array.length < 4 || 
           uint8Array[0] !== 0x50 || 
-          uint8Array[1] !== 0x4B || 
-          (uint8Array[2] !== 0x03 && uint8Array[2] !== 0x05 && uint8Array[2] !== 0x07) ||
-          (uint8Array[3] !== 0x04 && uint8Array[3] !== 0x06 && uint8Array[3] !== 0x08)) {
+          uint8Array[1] !== 0x4B) {
         throw new Error('File does not appear to be a valid ZIP/APKG file');
       }
       

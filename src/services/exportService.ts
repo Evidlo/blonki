@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { deckStore } from '../stores/deckStore';
 import { cardStore } from '../stores/cardStore';
 import { settingsStore } from '../stores/settingsStore';
+import { APKGGenerator } from './apkgFormat';
 import type { Deck, Card, Settings } from '../types';
 
 export interface ExportOptions {
@@ -18,6 +19,8 @@ export interface ExportResult {
 }
 
 class ExportService {
+  private apkgGenerator = new APKGGenerator();
+
   async exportData(options: ExportOptions): Promise<ExportResult> {
     try {
       const { deckIds, format, includeSettings = true } = options;
@@ -83,28 +86,25 @@ class ExportService {
   }
 
   private async exportAPKG(decks: Deck[], cards: Card[]): Promise<ExportResult> {
-    // For now, we'll create a simplified APKG-like export
-    // In a real implementation, you'd use a library like anki-apkg-export
-    
-    // Create a JSON file with APKG extension for now
-    const exportData = {
-      decks,
-      cards,
-      exportedAt: new Date().toISOString(),
-      version: '1.0.0',
-      format: 'apkg-export'
-    };
+    try {
+      // Generate proper APKG file
+      const apkgData = await this.apkgGenerator.generateAPKG(decks, cards, {
+        includeSettings: true
+      });
 
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const filename = `blonki-export-${new Date().toISOString().split('T')[0]}.apkg`;
+      const blob = new Blob([apkgData], { type: 'application/zip' });
+      const filename = `blonki-export-${new Date().toISOString().split('T')[0]}.apkg`;
 
-    return {
-      success: true,
-      message: `Successfully exported ${decks.length} decks and ${cards.length} cards as APKG`,
-      data: blob,
-      filename
-    };
+      return {
+        success: true,
+        message: `Successfully exported ${decks.length} decks and ${cards.length} cards as APKG`,
+        data: blob,
+        filename
+      };
+    } catch (error) {
+      console.error('APKG generation failed:', error);
+      throw new Error(`Failed to generate APKG file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   async downloadExport(options: ExportOptions): Promise<void> {

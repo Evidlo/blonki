@@ -23,6 +23,9 @@
   currentCardStore.subscribe(value => currentCard = value);
 
   onMount(() => {
+    // Reset selected deck when entering Edit view
+    selectedDeckStore.set(null);
+    
     // Data is loaded by storage service initialization in App.svelte
     // Just subscribe to store changes
   });

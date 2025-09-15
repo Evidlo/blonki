@@ -1,5 +1,5 @@
 import type { StorageAdapter, Deck, Card, Settings, ReviewResult } from '../types';
-import { APKGParser } from '../services/apkgParser';
+import { APKGParser, APKGGenerator } from '../services/apkgFormat';
 
 // Type declarations for Filesystem API
 declare global {
@@ -110,9 +110,11 @@ export class FileSystemAccessAdapter implements StorageAdapter {
   private fileHandles: Map<string, FileSystemFileHandle> = new Map(); // deckId -> fileHandle
   private filePaths: Map<string, string> = new Map(); // deckId -> display path
   private hasUnsavedChanges: Map<string, boolean> = new Map(); // deckId -> has changes
+  private apkgGenerator: APKGGenerator;
 
   constructor() {
     this.localStorageAdapter = new LocalStorageAdapter();
+    this.apkgGenerator = new APKGGenerator();
   }
 
   // Link a deck to a specific .apkg file
@@ -158,21 +160,17 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     }
 
     try {
-      // TODO: Implement proper .apkg file generation using anki-apkg-export or similar
-      // For now, we'll save as JSON with APKG-like structure
-      const data = {
-        deck,
-        cards,
-        exportedAt: new Date().toISOString(),
-        version: '1.0.0',
-        format: 'apkg-export'
-      };
+      // Generate proper APKG file
+      console.log('Generating APKG file for deck:', deck.name);
+      const apkgData = await this.apkgGenerator.generateAPKG([deck], cards, {
+        includeSettings: false
+      });
 
-      console.log('Writing to file handle:', fileHandle.name);
+      console.log('Writing APKG to file handle:', fileHandle.name);
       const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(data, null, 2));
+      await writable.write(apkgData);
       await writable.close();
-      console.log('Successfully saved deck to file');
+      console.log('Successfully saved deck to APKG file');
     } catch (error: any) {
       console.error('Failed to save deck to file:', error);
       this.filePaths.set(deckId, '[File Permission Error]');
@@ -184,7 +182,12 @@ export class FileSystemAccessAdapter implements StorageAdapter {
   async loadDeckFromFile(fileHandle: FileSystemFileHandle): Promise<{ deck: Deck; cards: Card[] }> {
     try {
       const file = await fileHandle.getFile();
+      console.log('File System Access - File name:', file.name);
+      console.log('File System Access - File size:', file.size);
+      console.log('File System Access - File type:', file.type);
+      
       const arrayBuffer = await file.arrayBuffer();
+      console.log('File System Access - ArrayBuffer size:', arrayBuffer.byteLength);
       
       // Try to parse as .apkg file first
       try {
@@ -208,18 +211,8 @@ export class FileSystemAccessAdapter implements StorageAdapter {
         
         return { deck, cards };
       } catch (apkgError) {
-        // If APKG parsing fails, try JSON fallback
-        console.warn('APKG parsing failed, trying JSON fallback:', apkgError);
-        try {
-          const text = await file.text();
-          const data = JSON.parse(text);
-          return {
-            deck: data.deck,
-            cards: data.cards || []
-          };
-        } catch (jsonError) {
-          throw new Error(`Failed to parse file as APKG or JSON: ${apkgError instanceof Error ? apkgError.message : 'Unknown error'}`);
-        }
+        // APKG parsing failed - no fallback
+        throw new Error(`Failed to parse APKG file: ${apkgError instanceof Error ? apkgError.message : 'Unknown error'}`);
       }
     } catch (error: any) {
       console.error('Failed to load deck from file:', error);
