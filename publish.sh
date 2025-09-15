@@ -3,9 +3,6 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Build the project
-npm run build
-
 # Switch to the publish branch, creating it if it doesn't exist
 git checkout publish || git checkout -b publish
 
