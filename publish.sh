@@ -16,7 +16,7 @@ mv dist/* .
 
 # Add all files to the staging area and commit
 git add .
-git commit -m "chore: publish new build"
+git commit --amend -m "chore: publish new build"
 
 # Push the changes to the remote repository, overwriting history.
 # The `--force` flag is used to overwrite the remote branch.
