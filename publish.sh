@@ -4,7 +4,7 @@
 set -e
 
 # Switch to the publish branch, creating it if it doesn't exist
-git checkout publish || git checkout -b publish
+git checkout publish
 
 # Remove everything from the root of the branch except the .git directory.
 # We use `git rm -r --ignore-unmatch '*'`. This will clear the working directory
