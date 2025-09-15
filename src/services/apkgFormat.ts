@@ -58,11 +58,12 @@ export class APKGParser {
     try {
       console.log('Loading SQLite database with sql.js...');
       
-      // Initialize sql.js with explicit WASM path
+      // Initialize sql.js with fallback for GitHub Pages
       const SQL = await initSqlJs({
         locateFile: (file: string) => {
           if (file.endsWith('.wasm')) {
-            return `/node_modules/sql.js/dist/${file}`;
+            // Use CDN for GitHub Pages compatibility (serves correct MIME type)
+            return `https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/${file}`;
           }
           return file;
         }
@@ -244,7 +245,15 @@ export class APKGGenerator {
 
   async initialize() {
     if (!this.sqlJs) {
-      this.sqlJs = await initSqlJs();
+      this.sqlJs = await initSqlJs({
+        locateFile: (file: string) => {
+          if (file.endsWith('.wasm')) {
+            // Use CDN for GitHub Pages compatibility
+            return `https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/${file}`;
+          }
+          return file;
+        }
+      });
     }
   }
 
