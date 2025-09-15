@@ -36,7 +36,7 @@ export interface ReviewResult {
 
 // App state types
 export interface AppState {
-  currentView: 'learn' | 'edit' | 'stats' | 'settings' | 'extras';
+  currentView: 'learn' | 'edit' | 'stats' | 'settings' | 'extras' | 'info';
   currentDeck?: string;
   currentCard?: string;
   viewHistory: string[];

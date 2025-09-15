@@ -75,6 +75,12 @@
     });
   }
 
+  function editDeck(deckId: string) {
+    selectedDeckStore.set(deckId);
+    loadCardsForDeck(deckId);
+    // Don't enter study mode, just show the cards list
+  }
+
   function selectDeckByIndex(index: number) {
     if (index >= 0 && index < decks.length) {
       selectedDeckIndex = index;
@@ -456,14 +462,14 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
                   <button
-                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                    class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
                     on:click={() => selectDeck(deck.id)}
                   >
                     Study
                   </button>
                   <button
-                    class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                    on:click|stopPropagation={() => selectDeck(deck.id)}
+                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                    on:click|stopPropagation={() => editDeck(deck.id)}
                     title="Edit deck"
                   >
                     Edit
@@ -644,32 +650,38 @@
         </button>
       </div>
     {:else}
-      <TableNavigation items={cards} selectedIndex={selectedCardIndex} onSelect={selectCardByIndex}>
-        <thead class="bg-gray-200">
+      <div class="overflow-x-auto">
+        <TableNavigation items={cards} selectedIndex={selectedCardIndex} onSelect={selectCardByIndex}>
+          <table class="min-w-full table-fixed">
+            <thead class="bg-gray-200 dark:bg-gray-700">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
               Front
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
               Back
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-1/5">
               Actions
             </th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
+        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200">
           {#each cards as card, index}
             <tr 
-              class="hover:bg-gray-200 {selectedCardIndex === index ? 'selected' : ''}"
+              class="hover:bg-gray-200 dark:hover:bg-gray-700 {selectedCardIndex === index ? 'selected' : ''}"
               on:click={() => editCard(card)}
               on:mouseenter={() => selectedCardIndex = index}
             >
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {card.front}
+              <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white overflow-hidden">
+                <div class="truncate" title={card.front}>
+                  {card.front}
+                </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {card.back}
+              <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-300 overflow-hidden">
+                <div class="truncate" title={card.back}>
+                  {card.back}
+                </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
@@ -691,7 +703,9 @@
             </tr>
           {/each}
         </tbody>
-      </TableNavigation>
+          </table>
+        </TableNavigation>
+      </div>
     {/if}
   </div>
 {:else}

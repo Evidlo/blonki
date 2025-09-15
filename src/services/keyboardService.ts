@@ -63,7 +63,7 @@ class KeyboardService {
     // Tab switching (1-5)
     if (event.key >= '1' && event.key <= '5') {
       const tabIndex = parseInt(event.key) - 1;
-      const tabs: AppState['currentView'][] = ['learn', 'edit', 'stats', 'settings', 'extras'];
+      const tabs: AppState['currentView'][] = ['learn', 'stats', 'settings', 'extras', 'info'];
       
       if (tabIndex < tabs.length) {
         this.switchToTab(tabs[tabIndex]);
@@ -77,13 +77,13 @@ class KeyboardService {
       return true;
     }
 
-    // Space for correct answer (only in learn view with a card)
+    // Space for showing answer or marking correct (only in learn view with a card)
     if (event.key === ' ' && this.currentView === 'learn' && this.currentCard) {
       this.handleCorrectAnswer();
       return true;
     }
 
-    // F for incorrect answer (only in learn view with a card)
+    // F for showing answer or marking incorrect (only in learn view with a card)
     if (event.key.toLowerCase() === 'f' && this.currentView === 'learn' && this.currentCard) {
       this.handleIncorrectAnswer();
       return true;

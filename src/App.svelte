@@ -5,11 +5,11 @@
   import { storageService } from './services/storageService';
   import { keyboardService } from './services/keyboardService';
   import { themeService } from './services/themeService';
-  import LearnView from './views/LearnView.svelte';
-  import EditView from './views/EditView.svelte';
+  import DeckView from './views/DeckView.svelte';
   import StatsView from './views/StatsView.svelte';
   import SettingsView from './views/SettingsView.svelte';
   import ExtrasView from './views/ExtrasView.svelte';
+  import InfoView from './views/InfoView.svelte';
   import type { AppState } from './types';
 
   let currentView: AppState['currentView'] = 'learn';
@@ -54,7 +54,14 @@
   <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 w-full">
     <div class="w-full max-w-4xl mx-auto px-4 py-4">
       <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Blonki</h1>
+        <button 
+          class="text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors bg-transparent border-none p-0 cursor-pointer"
+          on:click={() => navigateToView('info')}
+          title="Click to view app information"
+          aria-label="Blonki - Click to view app information"
+        >
+          Blonki
+        </button>
         <nav class="flex space-x-1">
           <button
             class="px-3 py-2 rounded-md text-sm font-medium transition-colors
@@ -63,16 +70,7 @@
                 : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'}"
             on:click={() => navigateToView('learn')}
           >
-            Learn
-          </button>
-          <button
-            class="px-3 py-2 rounded-md text-sm font-medium transition-colors
-              {currentView === 'edit' 
-                ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'}"
-            on:click={() => navigateToView('edit')}
-          >
-            Edit
+            Deck
           </button>
           <button
             class="px-3 py-2 rounded-md text-sm font-medium transition-colors
@@ -101,6 +99,16 @@
           >
             Extras
           </button>
+          <button
+            class="px-3 py-2 rounded-md text-sm font-medium transition-colors
+              {currentView === 'info' 
+                ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
+                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'}"
+            on:click={() => navigateToView('info')}
+            title="App Information"
+          >
+            Info
+          </button>
         </nav>
       </div>
     </div>
@@ -109,17 +117,17 @@
   <!-- Main Content -->
   <main class="flex-1 flex justify-center w-full">
     <div class="w-full max-w-4xl px-4 py-6 overflow-x-hidden">
-      {#if currentView === 'learn'}
-        <LearnView />
-      {:else if currentView === 'edit'}
-        <EditView />
-      {:else if currentView === 'stats'}
-        <StatsView />
-      {:else if currentView === 'settings'}
-        <SettingsView />
-      {:else if currentView === 'extras'}
-        <ExtrasView />
-      {/if}
+    {#if currentView === 'learn'}
+      <DeckView />
+    {:else if currentView === 'stats'}
+      <StatsView />
+    {:else if currentView === 'settings'}
+      <SettingsView />
+    {:else if currentView === 'extras'}
+      <ExtrasView />
+    {:else if currentView === 'info'}
+      <InfoView />
+    {/if}
     </div>
   </main>
 

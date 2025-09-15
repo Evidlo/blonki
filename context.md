@@ -38,10 +38,13 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - **`keyboardService`**: Keyboard shortcut handling
 
 #### APKG Processing
+- **`apkgFormat.ts`**: Combined parser and generator service for APKG files
 - **`APKGParser`**: SQLite-based Anki deck parsing using sql.js
-- **ZIP handling**: JSZip for APKG file extraction
-- **Compression**: fzstd for Zstandard decompression (.anki21b files)
+- **`APKGGenerator`**: Creates proper APKG files with Anki database schema
+- **ZIP handling**: JSZip for APKG file extraction and packaging
+- **Compression**: fzstd for Zstandard decompression (.anki21b files) - currently disabled
 - **SQLite parsing**: sql.js with WASM for database queries
+- **Format consolidation**: Single file approach for easier maintenance and future format support
 
 ## Implementation Status
 
@@ -79,6 +82,8 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] Import from URL and file upload
 - [x] Deck export functionality
 - [x] Deck deletion with card cleanup
+- [x] **Keyboard shortcuts**: Spacebar (show answer/mark correct), F key (show answer/mark incorrect)
+- [x] **Visual keyboard indicators**: Small monospace boxes showing shortcuts on buttons
 
 #### Edit Tab
 - [x] Deck selection for editing
@@ -96,17 +101,27 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] Default values loading
 
 #### Stats Tab
-- [x] Summary metrics display
-- [x] Review history visualization
-- [x] Card performance grid
-- [x] Responsive chart layouts
+- [x] Summary metrics display (UI complete)
+- [x] Review history visualization (UI complete)
+- [x] Card performance grid (UI complete)
+- [x] Responsive chart layouts (UI complete)
+- [ ] **Data integration**: Stats display placeholder data, not connected to actual card data
+- [ ] **SRS integration**: Statistics need to be calculated from real review data
 
 ### 🚧 Current Issues
 
-#### APKG Parsing
+#### APKG Export/Import
+- [ ] **Zstd compression not working**: fzstd library compression is disabled, exports are uncompressed
+- [ ] **Export functionality incomplete**: APKG generation works but compression is missing
 - [ ] Field parsing robustness (comma vs pipe delimiters)
 - [ ] Debug logging for field data format analysis
 - [ ] Improved field cleaning and HTML handling
+
+#### Stats Tab
+- [ ] **Stats are random/placeholder**: Statistics display is not connected to actual data
+- [ ] Review history visualization needs real data integration
+- [ ] Card performance metrics need proper calculation
+- [ ] SRS algorithm integration for accurate statistics
 
 #### Data Persistence
 - [ ] Study session state restoration on page reload
@@ -288,8 +303,13 @@ src/
 - **Permission Management**: Deferred permission dialogs until actual file modifications
 - **Tab State Isolation**: Fixed cross-tab state sharing issues
 - **Event Handling**: Resolved button event bubbling issues
+- **Keyboard Shortcuts**: Fixed spacebar and F key shortcuts for study interface
+- **APKG Format**: Consolidated parser and generator into single service file
+- **File Validation**: Improved APKG file validation and error handling
 
 ### Current Focus
+- **Zstd Compression**: Re-enabling fzstd compression for proper APKG export
+- **Stats Integration**: Connecting statistics to real card data and SRS algorithms
 - **Field Parsing**: Improving robustness of APKG field extraction
 - **Debug Logging**: Comprehensive logging for parsing analysis
 - **Error Handling**: Better user feedback for import failures
