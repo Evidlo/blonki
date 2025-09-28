@@ -9,8 +9,9 @@
   import { importService } from '../services/importService';
   import { exportService } from '../services/exportService';
   import { isFilesystemSupported } from '../utils/storage';
+  import { SM2Adapter } from '../utils/sm2Adapter';
   import TableNavigation from '../components/TableNavigation.svelte';
-  import type { Deck, Card } from '../types';
+  import type { Deck, Card, Settings } from '../types';
 
   let decks: Deck[] = [];
   let selectedDeck: string | null = null;
@@ -24,25 +25,44 @@
   let editingCard: Card | null = null;
   let isEditing = false;
   let selectedCardIndex = 0;
+  let settings: Settings | null = null;
+  let studyCards: Card[] = [];
+  let srsCounts = { new: 0, learning: 0, due: 0 };
+
+  // Function to get SRS counts for a deck
+  function getSRSCounts(deckId: string): { new: number; learning: number; due: number } {
+    const deckCards = cards.filter(card => card.deckId === deckId);
+    const counts = SM2Adapter.countCardsByStatus(deckCards);
+    console.log('getSRSCounts for deck', deckId, 'cards:', deckCards.length, 'counts:', counts);
+    return counts;
+  }
 
   // Subscribe to stores
   deckStore.subscribe(value => decks = value);
   selectedDeckStore.subscribe(value => selectedDeck = value);
-  cardStore.subscribe(value => cards = value);
+  cardStore.subscribe(value => {
+    cards = value;
+    // Update SRS counts when cards change
+    if (selectedDeck) {
+      srsCounts = getSRSCounts(selectedDeck);
+    }
+  });
   currentCardStore.subscribe(value => currentCard = value);
+  settingsStore.subscribe(value => settings = value);
   studySessionStore.subscribe(value => {
     studySession = value;
     isInStudyMode = value.isActive;
     currentCardIndex = value.currentCardIndex;
     showBack = value.showBack;
     
-    // If we're in study mode, load the current card
-    if (value.isActive && cards.length > 0 && value.currentCardIndex < cards.length) {
-      currentCardStore.set(cards[value.currentCardIndex]);
+    // If we're in study mode, load the current card from study cards
+    if (value.isActive && studyCards.length > 0 && value.currentCardIndex < studyCards.length) {
+      console.log('Study session subscription - setting current card:', studyCards[value.currentCardIndex]);
+      currentCardStore.set(studyCards[value.currentCardIndex]);
     }
   });
 
-  onMount(() => {
+  onMount(async () => {
     // Reset selected deck when entering Learn view
     selectedDeckStore.set(null);
     
@@ -52,30 +72,61 @@
     // Check if there's an active study session to restore
     if (studySession && studySession.isActive && studySession.deckId) {
       selectedDeckStore.set(studySession.deckId);
-      loadCardsForDeck(studySession.deckId);
+      await loadCardsForDeck(studySession.deckId);
+      
+      // Restore study cards and SRS counts
+      const dueCardsLimit = settings?.dueCardsLimit || 50;
+      studyCards = SM2Adapter.getStudyCards(cards, dueCardsLimit);
+      srsCounts = getSRSCounts(studySession.deckId);
+      
+      // Set current card from study cards
+      if (studyCards.length > 0 && studySession.currentCardIndex < studyCards.length) {
+        currentCardStore.set(studyCards[studySession.currentCardIndex]);
+      }
     }
     
     // Listen for keyboard events
     window.addEventListener('keyboard-correct', handleKeyboardCorrect);
     window.addEventListener('keyboard-incorrect', handleKeyboardIncorrect);
+    window.addEventListener('keyboard-quality', handleKeyboardQuality);
     window.addEventListener('keyboard-escape', handleKeyboardEscape);
   });
 
   onDestroy(() => {
     window.removeEventListener('keyboard-correct', handleKeyboardCorrect);
     window.removeEventListener('keyboard-incorrect', handleKeyboardIncorrect);
+    window.removeEventListener('keyboard-quality', handleKeyboardQuality);
     window.removeEventListener('keyboard-escape', handleKeyboardEscape);
   });
 
-  function selectDeck(deckId: string) {
+  async function selectDeck(deckId: string) {
     selectedDeckStore.set(deckId);
-    loadCardsForDeck(deckId);
+    await loadCardsForDeck(deckId);
+    
+    // Get SRS-aware study cards
+    const dueCardsLimit = settings?.dueCardsLimit || 50;
+    studyCards = SM2Adapter.getStudyCards(cards, dueCardsLimit);
+    srsCounts = getSRSCounts(deckId);
+    
+    console.log('selectDeck - studyCards:', studyCards.length, 'cards:', studyCards);
+    
+    if (studyCards.length === 0) {
+      // No cards due for study
+      alert('No cards are due for review right now!');
+      return;
+    }
+    
     studySessionStore.set({
       isActive: true,
       currentCardIndex: 0,
       showBack: false,
       deckId: deckId
     });
+    
+    // Set the first study card as current
+    if (studyCards.length > 0) {
+      currentCardStore.set(studyCards[0]);
+    }
   }
 
   function editDeck(deckId: string) {
@@ -97,8 +148,8 @@
         // Show the answer first
         showCardBack();
       } else {
-        // Mark as correct
-        handleResponse('correct');
+        // Mark as quality 3 (good)
+        handleQualityResponse(3);
       }
     }
   }
@@ -109,9 +160,20 @@
         // Show the answer first
         showCardBack();
       } else {
-        // Mark as incorrect
-        handleResponse('incorrect');
+        // Mark as quality 1 (again)
+        handleQualityResponse(1);
       }
+    }
+  }
+
+  function handleKeyboardQuality(event: Event) {
+    const customEvent = event as CustomEvent;
+    if (currentCard && !showBack) {
+      // Show the answer first
+      showCardBack();
+    } else if (currentCard) {
+      // Mark with quality grade
+      handleQualityResponse(customEvent.detail.quality);
     }
   }
 
@@ -139,6 +201,56 @@
     }
   }
 
+  function handleQualityResponse(quality: 1 | 2 | 3 | 4) {
+    if (!currentCard) return;
+    
+    // Show answer first if not already shown
+    if (!showBack) {
+      showCardBack();
+      return;
+    }
+    
+    // Process the quality response
+    processQualityResponse(quality);
+  }
+
+  async function processQualityResponse(quality: 1 | 2 | 3 | 4) {
+    if (!currentCard) return;
+
+    try {
+      // Calculate new SRS values using SM-2 algorithm
+      const newSRSValues = SM2Adapter.calculateNewSRSValuesWithQuality(currentCard, quality);
+      
+      // Update the card with new SRS values
+      const updatedCard = {
+        ...currentCard,
+        ...newSRSValues,
+        updatedAt: new Date()
+      };
+      
+      // Save the updated card
+      await storageService.updateCard(updatedCard);
+      
+      // Update the current card in the study cards array
+      if (studyCards.length > 0 && currentCardIndex < studyCards.length) {
+        studyCards[currentCardIndex] = updatedCard;
+      }
+      
+      // Reload cards to reflect changes in storage
+      if (selectedDeck) {
+        await loadCardsForDeck(selectedDeck);
+        // Update SRS counts from the current cards
+        srsCounts = getSRSCounts(selectedDeck);
+        console.log('Updated SRS counts:', srsCounts);
+      }
+    } catch (error) {
+      console.error('Failed to update card with SRS values:', error);
+    }
+    
+    // Move to next card after updating study cards
+    nextCard();
+  }
+
   function showCardBack() {
     studySessionStore.update(session => ({
       ...session,
@@ -146,26 +258,55 @@
     }));
   }
 
-  function handleResponse(response: 'correct' | 'incorrect') {
+  async function handleResponse(response: 'correct' | 'incorrect') {
     if (!currentCard) return;
 
-    // TODO: Update card with SRS algorithm
-    // TODO: Save review result
+    try {
+      // Calculate new SRS values using SM-2 algorithm
+      const newSRSValues = SM2Adapter.calculateNewSRSValues(currentCard, response);
+      
+      // Update the card with new SRS values
+      const updatedCard = {
+        ...currentCard,
+        ...newSRSValues,
+        updatedAt: new Date()
+      };
+      
+      // Save the updated card
+      await storageService.updateCard(updatedCard);
+      
+      // Reload cards to reflect changes
+      if (selectedDeck) {
+        await loadCardsForDeck(selectedDeck);
+      }
+    } catch (error) {
+      console.error('Failed to update card with SRS values:', error);
+    }
     
     // Move to next card
     nextCard();
   }
 
   function nextCard() {
-    if (currentCardIndex < cards.length - 1) {
-      const newIndex = currentCardIndex + 1;
+    // Get the current index from the store to ensure we have the latest value
+    const currentIndex = get(studySessionStore).currentCardIndex;
+    console.log('nextCard called - currentCardIndex:', currentIndex, 'studyCards.length:', studyCards.length);
+    
+    if (currentIndex < studyCards.length - 1) {
+      const newIndex = currentIndex + 1;
+      console.log('Moving to next card - newIndex:', newIndex, 'card:', studyCards[newIndex]);
       studySessionStore.update(session => ({
         ...session,
         currentCardIndex: newIndex,
         showBack: false
       }));
+      // Update current card to the next study card
+      if (studyCards[newIndex]) {
+        currentCardStore.set(studyCards[newIndex]);
+      }
     } else {
-      // Finished all cards
+      // Finished all study cards
+      console.log('Finished all study cards');
       exitStudyMode();
     }
   }
@@ -442,37 +583,50 @@
       <TableNavigation items={decks} selectedIndex={selectedDeckIndex} onSelect={selectDeckByIndex}>
           <thead class="bg-gray-200">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Deck Name
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Location
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <!-- <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Cards
+              </th> -->
+              <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                New / Learn / Due
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
           {#each decks as deck, index}
+            {@const srsCounts = getSRSCounts(deck.id)}
             <tr 
               class="hover:bg-gray-200 {selectedDeckIndex === index ? 'selected' : ''}"
               on:click={() => selectDeck(deck.id)}
               on:mouseenter={() => selectedDeckIndex = index}
             >
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <td class="px-5 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {deck.name}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td class="px-5 py-4 whitespace-nowrap text-sm text-gray-500">
                   {deck.isLinkedToFile ? 'Filesystem' : 'Browser Storage'}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <!-- <td class="px-5 py-4 whitespace-nowrap text-sm text-gray-500">
                   {deck.cardCount}
+                </td> -->
+                <td class="px-5 py-4 whitespace-nowrap text-sm font-medium">
+                  <div class="flex space-x-2">
+                    <span class="text-blue-600 font-semibold">{srsCounts.new}</span>
+                    <span class="text-gray-400">/</span>
+                    <span class="text-red-600 font-semibold">{srsCounts.learning}</span>
+                    <span class="text-gray-400">/</span>
+                    <span class="text-green-600 font-semibold">{srsCounts.due}</span>
+                  </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <td class="px-5 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex space-x-2">
                   <button
                     class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
@@ -529,13 +683,13 @@
       <!-- Progress indicator -->
       <div class="mb-6">
         <div class="flex justify-between text-sm text-gray-600 mb-2">
-          <span>Card {currentCardIndex + 1} of {cards.length}</span>
-          <span>{Math.round(((currentCardIndex + 1) / cards.length) * 100)}%</span>
+          <span>Card {currentCardIndex + 1} of {studyCards.length}</span>
+          <span>{Math.round(((currentCardIndex + 1) / studyCards.length) * 100)}%</span>
         </div>
         <div class="w-full bg-gray-200 rounded-full h-2">
           <div 
             class="bg-blue-600 h-2 rounded-full transition-all duration-300"
-            style="width: {((currentCardIndex + 1) / cards.length) * 100}%"
+            style="width: {((currentCardIndex + 1) / studyCards.length) * 100}%"
           ></div>
         </div>
       </div>
@@ -567,19 +721,59 @@
           </button>
         {:else}
           <button
-            class="px-6 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center gap-2"
-            on:click={() => handleResponse('incorrect')}
+            class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center gap-2"
+            on:click={() => handleQualityResponse(1)}
           >
-            Incorrect
-            <span class="text-xs bg-red-500 px-1.5 py-0.5 rounded font-mono">F</span>
+            Again
+            <span class="text-xs bg-red-500 px-1.5 py-0.5 rounded font-mono">1</span>
           </button>
           <button
-            class="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-2"
-            on:click={() => handleResponse('correct')}
+            class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors flex items-center gap-2"
+            on:click={() => handleQualityResponse(2)}
           >
-            Correct
-            <span class="text-xs bg-green-500 px-1.5 py-0.5 rounded font-mono">SPC</span>
+            Hard
+            <span class="text-xs bg-orange-500 px-1.5 py-0.5 rounded font-mono">2</span>
           </button>
+          <button
+            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-2"
+            on:click={() => handleQualityResponse(3)}
+          >
+            Good
+            <span class="text-xs bg-green-500 px-1.5 py-0.5 rounded font-mono">3</span>
+          </button>
+          <button
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+            on:click={() => handleQualityResponse(4)}
+          >
+            Easy
+            <span class="text-xs bg-blue-500 px-1.5 py-0.5 rounded font-mono">4</span>
+          </button>
+        {/if}
+      </div>
+      
+      <!-- SRS Counts Display -->
+      <div class="absolute bottom-4 right-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 border border-gray-200 dark:border-gray-700">
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Study Progress</div>
+        {#if currentCard}
+          {@const currentStatus = SM2Adapter.getCardStatus(currentCard)}
+          <div class="flex space-x-3 text-sm font-medium">
+            <span class="text-blue-600 {currentStatus === 'new' ? 'underline' : ''}">
+              New: {srsCounts.new}
+            </span>
+            <span class="text-red-600 {currentStatus === 'learning' ? 'underline' : ''}">
+              Learn: {srsCounts.learning}
+            </span>
+            <span class="text-green-600 {currentStatus === 'due' ? 'underline' : ''}">
+              Due: {srsCounts.due}
+            </span>
+          </div>
+          <div class="text-xs text-gray-400 mt-1">Status: {currentStatus}</div>
+        {:else}
+          <div class="flex space-x-3 text-sm font-medium">
+            <span class="text-blue-600">New: {srsCounts.new}</span>
+            <span class="text-red-600">Learn: {srsCounts.learning}</span>
+            <span class="text-green-600">Due: {srsCounts.due}</span>
+          </div>
         {/if}
       </div>
     </div>
@@ -646,11 +840,14 @@
           Add New Card
         </button>
         <button
-          class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors flex items-center gap-2"
+          class="flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
           on:click={() => selectedDeckStore.set(null)}
         >
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
           Back to Decks
-          <kbd class="px-1.5 py-0.5 bg-gray-500 rounded text-xs font-mono">ESC</kbd>
+          <kbd class="ml-2 px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono">ESC</kbd>
         </button>
       </div>
     </div>
@@ -670,18 +867,18 @@
         <TableNavigation items={cards} selectedIndex={selectedCardIndex} onSelect={selectCardByIndex}>
           <table class="min-w-full table-fixed">
             <thead class="bg-gray-200 dark:bg-gray-700">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
-              Front
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
-              Back
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-1/5">
-              Actions
-            </th>
-          </tr>
-        </thead>
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
+                  Front
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
+                  Back
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-1/5">
+                  Actions
+                </th>
+              </tr>
+            </thead>
         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200">
           {#each cards as card, index}
             <tr 
@@ -729,11 +926,14 @@
   <div class="text-center py-12">
     <div class="text-gray-500 mb-4">No cards available in this deck</div>
     <button
-      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+      class="flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
       on:click={() => selectedDeckStore.set(null)}
     >
+      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
       Back to Decks
-      <kbd class="px-1.5 py-0.5 bg-blue-500 rounded text-xs font-mono">ESC</kbd>
+      <kbd class="ml-2 px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono">ESC</kbd>
     </button>
   </div>
 {/if}

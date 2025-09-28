@@ -14,7 +14,8 @@
     sm2MinInterval: 1,
     sm2MaxInterval: 36500,
     theme: 'auto',
-    cardsPerSession: 20
+    cardsPerSession: 20,
+    dueCardsLimit: 50
   };
 
   let filesystemSupported = false;
@@ -120,7 +121,8 @@
       sm2MinInterval: 1,
       sm2MaxInterval: 36500,
       theme: 'auto',
-      cardsPerSession: 20
+      cardsPerSession: 20,
+      dueCardsLimit: 50
     };
     settingsStore.set(settings);
   }
@@ -251,6 +253,20 @@
             min="1"
             max="100"
           />
+        </div>
+        
+        <div>
+          <label for="due-cards-limit" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Due Cards Limit</label>
+          <input
+            id="due-cards-limit"
+            type="number"
+            bind:value={settings.dueCardsLimit}
+            on:change={(e) => updateSetting('dueCardsLimit', parseInt((e.target as HTMLInputElement).value))}
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            min="1"
+            max="200"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum number of due cards to study in one session</p>
         </div>
       </div>
     </div>

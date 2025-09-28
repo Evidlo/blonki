@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "^0.0.27",
+    "@dtjv/sm-2": "^2.1.0",
     "fzstd": "^0.1.1",
     "jszip": "^3.10.1",
     "sql.js": "^1.8.0"

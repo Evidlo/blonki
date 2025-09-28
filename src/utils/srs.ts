@@ -1,6 +1,7 @@
 import type { Card, SRSAlgorithm, Settings } from '../types';
+import { SM2Adapter } from './sm2Adapter';
 
-// SM-2 Algorithm implementation
+// SM-2 Algorithm implementation using @dtjv/sm-2 library
 export class SM2Algorithm implements SRSAlgorithm {
   name = 'SM-2';
 
@@ -9,46 +10,8 @@ export class SM2Algorithm implements SRSAlgorithm {
     response: 'correct' | 'incorrect',
     responseTime: number
   ): Partial<Card> {
-    const now = new Date();
-    
-    if (response === 'incorrect') {
-      // Reset the card
-      return {
-        interval: 1,
-        repetitions: 0,
-        easeFactor: Math.max(1.3, card.easeFactor - 0.2),
-        dueDate: new Date(now.getTime() + 24 * 60 * 60 * 1000), // 1 day from now
-        lastReviewed: now
-      };
-    }
-
-    // Correct response
-    const newRepetitions = card.repetitions + 1;
-    let newInterval: number;
-    let newEaseFactor = card.easeFactor;
-
-    if (newRepetitions === 1) {
-      newInterval = 1;
-    } else if (newRepetitions === 2) {
-      newInterval = 6;
-    } else {
-      newInterval = Math.round(card.interval * card.easeFactor);
-    }
-
-    // Update ease factor based on response time
-    const idealResponseTime = 10000; // 10 seconds
-    const timeFactor = Math.min(responseTime / idealResponseTime, 2);
-    newEaseFactor = Math.max(1.3, card.easeFactor + (0.1 - (5 - timeFactor) * (0.08 + (5 - timeFactor) * 0.02)));
-
-    const newDueDate = new Date(now.getTime() + newInterval * 24 * 60 * 60 * 1000);
-
-    return {
-      interval: newInterval,
-      repetitions: newRepetitions,
-      easeFactor: newEaseFactor,
-      dueDate: newDueDate,
-      lastReviewed: now
-    };
+    // Use the SM-2 library for calculations
+    return SM2Adapter.calculateNewSRSValues(card, response);
   }
 }
 

@@ -60,9 +60,9 @@ class KeyboardService {
       return false;
     }
 
-    // Tab switching (1-5)
-    if (event.key >= '1' && event.key <= '5') {
-      const tabIndex = parseInt(event.key) - 1;
+    // Tab switching (6-9, 0) - remapped to avoid conflict with quality buttons
+    if (event.key === '6' || event.key === '7' || event.key === '8' || event.key === '9' || event.key === '0') {
+      const tabIndex = event.key === '0' ? 4 : parseInt(event.key) - 6;
       const tabs: AppState['currentView'][] = ['learn', 'stats', 'settings', 'extras', 'info'];
       
       console.log(`Keyboard shortcut: ${event.key} -> tab ${tabIndex} -> ${tabs[tabIndex]}`);
@@ -73,11 +73,10 @@ class KeyboardService {
       }
     }
 
-    // Escape key for triggering visible back/cancel buttons
+    // Escape key for simple back navigation
     if (event.key === 'Escape') {
-      console.log('Keyboard shortcut: ESC -> trigger back/cancel button');
-      // Dispatch a custom event that visible back/cancel buttons can listen to
-      window.dispatchEvent(new CustomEvent('keyboard-escape'));
+      console.log('Keyboard shortcut: ESC -> simple back navigation');
+      this.handleSimpleBackNavigation();
       return true;
     }
 
@@ -90,6 +89,13 @@ class KeyboardService {
     // F for showing answer or marking incorrect (only in learn view with a card)
     if (event.key.toLowerCase() === 'f' && this.currentView === 'learn' && this.currentCard) {
       this.handleIncorrectAnswer();
+      return true;
+    }
+
+    // Quality buttons (1-4) for SRS responses (only in learn view with a card)
+    if (event.key >= '1' && event.key <= '4' && this.currentView === 'learn' && this.currentCard) {
+      const quality = parseInt(event.key) as 1 | 2 | 3 | 4;
+      this.handleQualityResponse(quality);
       return true;
     }
 
@@ -121,6 +127,30 @@ class KeyboardService {
     // This will be handled by the LearnView component
     // We'll dispatch a custom event that the component can listen to
     window.dispatchEvent(new CustomEvent('keyboard-incorrect'));
+  }
+
+  private handleQualityResponse(quality: 1 | 2 | 3 | 4) {
+    // This will be handled by the LearnView component
+    // We'll dispatch a custom event that the component can listen to
+    window.dispatchEvent(new CustomEvent('keyboard-quality', { detail: { quality } }));
+  }
+
+  private handleSimpleBackNavigation() {
+    // Simple back navigation logic:
+    // - Study view → Deck main view
+    // - Edit view → Edit main view  
+    // - Main views → Do nothing
+    
+    if (this.currentView === 'learn') {
+      // If in study mode, exit to deck selection
+      if (this.selectedDeck) {
+        window.dispatchEvent(new CustomEvent('keyboard-escape'));
+      }
+    } else if (this.currentView === 'edit') {
+      // If in edit mode, exit to edit main view
+      window.dispatchEvent(new CustomEvent('keyboard-escape'));
+    }
+    // For main views (stats, settings, extras, info), do nothing
   }
 }
 

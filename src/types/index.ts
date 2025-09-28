@@ -53,6 +53,7 @@ export interface Settings {
   // UI settings
   theme: 'light' | 'dark' | 'auto';
   cardsPerSession: number;
+  dueCardsLimit: number;
 }
 
 // Storage types

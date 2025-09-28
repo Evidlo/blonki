@@ -8,7 +8,8 @@ const defaultSettings: Settings = {
   sm2MinInterval: 1,
   sm2MaxInterval: 36500,
   theme: 'auto',
-  cardsPerSession: 20
+  cardsPerSession: 20,
+  dueCardsLimit: 50
 };
 
 export const settingsStore = writable<Settings>(defaultSettings);
