@@ -44,7 +44,6 @@ export interface AppState {
 
 // Settings types
 export interface Settings {
-  storageType: 'localStorage' | 'fileSystemAccess';
   srsAlgorithm: 'sm2' | 'sm17' | 'custom';
   // SM2 parameters
   sm2InitialInterval: number;

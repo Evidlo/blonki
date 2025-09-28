@@ -15,25 +15,40 @@
   let currentView: AppState['currentView'] = 'learn';
   let viewHistory: string[] = [];
 
+  // Subscribe to app store changes
+  appStore.subscribe(state => {
+    currentView = state.currentView;
+    viewHistory = state.viewHistory;
+  });
+
   // Handle keyboard navigation
   function handleKeydown(event: KeyboardEvent) {
-    keyboardService.handleKeydown(event);
+    console.log(`Key pressed: ${event.key}, target:`, event.target);
+    const handled = keyboardService.handleKeydown(event);
+    console.log(`Keyboard event handled: ${handled}`);
   }
 
   function navigateToView(view: AppState['currentView']) {
     if (view !== currentView) {
-      viewHistory.push(currentView);
-      currentView = view;
-      appStore.update(state => ({ ...state, currentView, viewHistory }));
+      const newHistory = [...viewHistory, currentView];
+      appStore.update(state => ({ 
+        ...state, 
+        currentView: view, 
+        viewHistory: newHistory 
+      }));
     }
   }
 
   function goBack() {
     if (viewHistory.length > 0) {
-      const previousView = viewHistory.pop();
+      const newHistory = [...viewHistory];
+      const previousView = newHistory.pop();
       if (previousView) {
-        currentView = previousView as AppState['currentView'];
-        appStore.update(state => ({ ...state, currentView, viewHistory }));
+        appStore.update(state => ({ 
+          ...state, 
+          currentView: previousView as AppState['currentView'], 
+          viewHistory: newHistory 
+        }));
       }
     }
   }
@@ -41,11 +56,23 @@
   onMount(() => {
     document.addEventListener('keydown', handleKeydown);
     
+    // Listen for ESC key events to trigger back button
+    function handleKeyboardEscape() {
+      if (viewHistory.length > 0) {
+        goBack();
+      }
+    }
+    
+    window.addEventListener('keyboard-escape', handleKeyboardEscape);
+    
     // Initialize services (fire and forget)
     storageService.initialize().catch(console.error);
     // Theme service initializes automatically
     
-    return () => document.removeEventListener('keydown', handleKeydown);
+    return () => {
+      document.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('keyboard-escape', handleKeyboardEscape);
+    };
   });
 </script>
 
@@ -135,7 +162,7 @@
   {#if viewHistory.length > 0}
     <div class="fixed bottom-4 left-4">
       <button
-        class="bg-white dark:bg-gray-800 shadow-lg rounded-full p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        class="bg-white dark:bg-gray-800 shadow-lg rounded-full p-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
         on:click={goBack}
         title="Go back (ESC)"
         aria-label="Go back"
@@ -143,6 +170,7 @@
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
+        <kbd class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono">ESC</kbd>
       </button>
     </div>
   {/if}

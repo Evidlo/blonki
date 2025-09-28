@@ -43,7 +43,7 @@
       <div class="grid md:grid-cols-2 gap-6">
         <div>
           <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-3">How do I sync?</h3>
-        Files are currently either saved in browser storage on the host filesystem (Chrome only).  With filesystem storage, you can use Syncthing/Dropbox or an equivalent service for syncing files.
+        Blonki automatically uses File System Access API when available (Chrome/Edge), saving decks directly to .apkg files on your disk. Otherwise, it falls back to browser storage. With filesystem storage, you can use Syncthing/Dropbox or an equivalent service for syncing files.
         </div>
         <div>
           <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Can I sync with Ankiweb?</h3>

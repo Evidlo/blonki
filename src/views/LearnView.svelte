@@ -8,6 +8,7 @@
   import { storageService } from '../services/storageService';
   import { importService } from '../services/importService';
   import { exportService } from '../services/exportService';
+  import { isFilesystemSupported } from '../utils/storage';
   import TableNavigation from '../components/TableNavigation.svelte';
   import type { Deck, Card } from '../types';
 
@@ -57,11 +58,13 @@
     // Listen for keyboard events
     window.addEventListener('keyboard-correct', handleKeyboardCorrect);
     window.addEventListener('keyboard-incorrect', handleKeyboardIncorrect);
+    window.addEventListener('keyboard-escape', handleKeyboardEscape);
   });
 
   onDestroy(() => {
     window.removeEventListener('keyboard-correct', handleKeyboardCorrect);
     window.removeEventListener('keyboard-incorrect', handleKeyboardIncorrect);
+    window.removeEventListener('keyboard-escape', handleKeyboardEscape);
   });
 
   function selectDeck(deckId: string) {
@@ -103,6 +106,17 @@
         // Mark as incorrect
         handleResponse('incorrect');
       }
+    }
+  }
+
+  function handleKeyboardEscape() {
+    // Priority order: editing mode > study mode > deck selection
+    if (isEditing) {
+      cancelEdit();
+    } else if (isInStudyMode) {
+      exitStudyMode();
+    } else if (selectedDeck) {
+      selectedDeckStore.set(null);
     }
   }
 
@@ -269,7 +283,7 @@
           if (!file) return;
 
           try {
-            const result = await importService.importFile(file);
+            const result = await importService.importFile(file, true); // Merge with existing
             if (!result.success) {
               alert(`Import failed: ${result.message}`);
             }
@@ -300,9 +314,8 @@
 
       const fileHandle = fileHandles[0];
       
-      // Check current storage type
-      const settings = get(settingsStore);
-      if (settings.storageType === 'fileSystemAccess') {
+      // Check if File System Access API is available
+      if (isFilesystemSupported()) {
         // Load deck from file and link it
         const { deck, cards } = await storageService.loadDeckFromFile(fileHandle);
         console.log('Loaded deck with ID:', deck.id);
@@ -328,7 +341,7 @@
       } else {
         // Traditional import (localStorage mode)
         const file = await fileHandle.getFile();
-        const result = await importService.importFile(file);
+        const result = await importService.importFile(file, true); // Merge with existing
         if (!result.success) {
           alert(`Import failed: ${result.message}`);
         }
@@ -448,7 +461,7 @@
                   {deck.name}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {deck.filePath || 'Browser Storage'}
+                  {deck.isLinkedToFile ? 'Filesystem' : 'Browser Storage'}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {deck.cardCount}
@@ -503,6 +516,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
           Back to Decks
+          <kbd class="ml-2 px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono">ESC</kbd>
         </button>
       </div>
       
@@ -598,10 +612,11 @@
 
       <div class="flex justify-end space-x-4 mt-8">
         <button
-          class="px-4 py-2 text-gray-600 hover:text-gray-900"
+          class="px-4 py-2 text-gray-600 hover:text-gray-900 flex items-center gap-2"
           on:click={cancelEdit}
         >
           Cancel
+          <kbd class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono">ESC</kbd>
         </button>
         <button
           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -625,10 +640,11 @@
           Add New Card
         </button>
         <button
-          class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+          class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors flex items-center gap-2"
           on:click={() => selectedDeckStore.set(null)}
         >
           Back to Decks
+          <kbd class="px-1.5 py-0.5 bg-gray-500 rounded text-xs font-mono">ESC</kbd>
         </button>
       </div>
     </div>
@@ -699,10 +715,11 @@
   <div class="text-center py-12">
     <div class="text-gray-500 mb-4">No cards available in this deck</div>
     <button
-      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
       on:click={() => selectedDeckStore.set(null)}
     >
       Back to Decks
+      <kbd class="px-1.5 py-0.5 bg-blue-500 rounded text-xs font-mono">ESC</kbd>
     </button>
   </div>
 {/if}

@@ -21,7 +21,7 @@
     "svelte-check": "^4.1.4",
     "tailwindcss": "^4.1.13",
     "typescript": "~5.7.2",
-    "vite": "^6.1.0"
+    "vite": "^6.3.6"
   },
   "dependencies": {
     "fzstd": "^0.1.1",

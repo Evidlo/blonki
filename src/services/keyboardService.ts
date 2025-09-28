@@ -65,15 +65,19 @@ class KeyboardService {
       const tabIndex = parseInt(event.key) - 1;
       const tabs: AppState['currentView'][] = ['learn', 'stats', 'settings', 'extras', 'info'];
       
+      console.log(`Keyboard shortcut: ${event.key} -> tab ${tabIndex} -> ${tabs[tabIndex]}`);
+      
       if (tabIndex < tabs.length) {
         this.switchToTab(tabs[tabIndex]);
         return true;
       }
     }
 
-    // Escape key for going back
+    // Escape key for triggering visible back/cancel buttons
     if (event.key === 'Escape') {
-      this.goBack();
+      console.log('Keyboard shortcut: ESC -> trigger back/cancel button');
+      // Dispatch a custom event that visible back/cancel buttons can listen to
+      window.dispatchEvent(new CustomEvent('keyboard-escape'));
       return true;
     }
 
@@ -94,6 +98,7 @@ class KeyboardService {
 
   private switchToTab(tab: AppState['currentView']) {
     const currentState = get(appStore);
+    console.log(`switchToTab: ${currentState.currentView} -> ${tab}`);
     if (tab !== currentState.currentView) {
       const newHistory = [...currentState.viewHistory, currentState.currentView];
       appStore.update(state => ({
@@ -101,22 +106,10 @@ class KeyboardService {
         currentView: tab,
         viewHistory: newHistory
       }));
+      console.log(`Tab switched to: ${tab}`);
     }
   }
 
-  private goBack() {
-    const currentState = get(appStore);
-    if (currentState.viewHistory.length > 0) {
-      const previousView = currentState.viewHistory.pop();
-      if (previousView) {
-        appStore.update(state => ({
-          ...state,
-          currentView: previousView as AppState['currentView'],
-          viewHistory: [...state.viewHistory]
-        }));
-      }
-    }
-  }
 
   private handleCorrectAnswer() {
     // This will be handled by the LearnView component

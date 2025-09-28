@@ -15,7 +15,23 @@ export interface APKGGenerationOptions {
 
 // APKG Parser - for reading APKG files
 export class APKGParser {
-  async parseAPKG(arrayBuffer: ArrayBuffer): Promise<APKGData> {
+  // Helper function to check if a deck name is generic and should be replaced with filename
+  private isGenericDeckName(name: string): boolean {
+    const genericNames = [
+      'Imported Deck',
+      'Default',
+      'Default Deck',
+      'Untitled',
+      'Untitled Deck',
+      'New Deck',
+      'Deck',
+      'Collection',
+      'Anki Deck'
+    ];
+    return genericNames.includes(name) || name.trim() === '';
+  }
+
+  async parseAPKG(arrayBuffer: ArrayBuffer, filename?: string): Promise<APKGData> {
     try {
       // Debug: Log file info
       console.log('APKG file size:', arrayBuffer.byteLength);
@@ -43,14 +59,14 @@ export class APKGParser {
       }
 
       // Parse the SQLite database
-      return await this.parseSQLite(sqliteData);
+      return await this.parseSQLite(sqliteData, filename);
     } catch (error) {
       console.error('APKG parsing failed:', error);
       throw new Error(`Failed to parse APKG file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  private async parseSQLite(sqliteData: Uint8Array): Promise<APKGData> {
+  private async parseSQLite(sqliteData: Uint8Array, filename?: string): Promise<APKGData> {
     const now = new Date();
     const decks: Deck[] = [];
     const cards: Card[] = [];
@@ -99,7 +115,14 @@ export class APKGParser {
         console.warn('Could not read col table:', error);
       }
       
-      console.log(`Deck name: ${deckName}`);
+      console.log(`Deck name from APKG: ${deckName}`);
+      
+      // If the deck name is generic and we have a filename, use the filename instead
+      if (this.isGenericDeckName(deckName) && filename) {
+        const cleanFilename = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+        console.log(`Using filename as deck name: ${cleanFilename}`);
+        deckName = cleanFilename;
+      }
       
       // Get cards using a simple query
       try {
@@ -152,7 +175,8 @@ export class APKGParser {
         description: 'Imported from APKG file',
         createdAt: now,
         updatedAt: now,
-        cardCount: cards.length
+        cardCount: cards.length,
+        isLinkedToFile: false
       };
       
       // Update deck ID in all cards

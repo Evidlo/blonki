@@ -105,13 +105,7 @@ class ImportService {
         throw new Error('File does not appear to be a valid ZIP/APKG file');
       }
       
-      const data = await apkgParser.parseAPKG(arrayBuffer);
-      
-      // If deck name is still "Imported Deck", use filename as fallback
-      if (data.decks.length > 0 && data.decks[0].name === 'Imported Deck') {
-        const filename = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
-        data.decks[0].name = filename;
-      }
+      const data = await apkgParser.parseAPKG(arrayBuffer, file.name);
       
       await storageService.importData(data, mergeWithExisting);
 
@@ -144,7 +138,9 @@ class ImportService {
         return await this.importJSONData(data, mergeWithExisting);
       } else if (contentType.includes('application/zip') || url.endsWith('.apkg')) {
         const arrayBuffer = await response.arrayBuffer();
-        const data = await apkgParser.parseAPKG(arrayBuffer);
+        // Extract filename from URL for better deck naming
+        const urlFilename = url.split('/').pop() || 'imported-deck';
+        const data = await apkgParser.parseAPKG(arrayBuffer, urlFilename);
         await storageService.importData(data, mergeWithExisting);
         
         return {

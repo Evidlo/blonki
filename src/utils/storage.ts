@@ -192,7 +192,7 @@ export class FileSystemAccessAdapter implements StorageAdapter {
       // Try to parse as .apkg file first
       try {
         const parser = new APKGParser();
-        const apkgData = await parser.parseAPKG(arrayBuffer);
+        const apkgData = await parser.parseAPKG(arrayBuffer, file.name);
         
         // For File System Access, we'll take the first deck and its cards
         // In the future, we might want to handle multiple decks
@@ -202,12 +202,6 @@ export class FileSystemAccessAdapter implements StorageAdapter {
         
         const deck = apkgData.decks[0];
         const cards = apkgData.cards.filter(card => card.deckId === deck.id);
-        
-        // If the deck name is generic, use the filename
-        if (deck.name === 'Imported Deck' || deck.name === 'Default') {
-          const fileName = file.name.replace('.apkg', '');
-          deck.name = fileName;
-        }
         
         return { deck, cards };
       } catch (apkgError) {

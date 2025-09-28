@@ -15,12 +15,12 @@ class StorageService {
   }
 
   async initialize() {
-    // Load settings directly from localStorage to determine storage type
+    // Load settings directly from localStorage
     const settings = await this.localStorageAdapter.loadSettings();
     settingsStore.set(settings);
     
-    // Create adapter based on current storage type
-    if (settings.storageType === 'fileSystemAccess' && isFilesystemSupported()) {
+    // Automatically prefer File System Access API if available, otherwise use localStorage
+    if (isFilesystemSupported()) {
       this.adapter = new FileSystemAccessAdapter();
     }
     
@@ -76,12 +76,24 @@ class StorageService {
     return data;
   }
 
-  async importData(data: any) {
+  async importData(data: any, mergeWithExisting = false) {
     if (data.decks) {
-      await this.saveDecks(data.decks);
+      if (mergeWithExisting) {
+        const existingDecks = get(deckStore);
+        const mergedDecks = [...existingDecks, ...data.decks];
+        await this.saveDecks(mergedDecks);
+      } else {
+        await this.saveDecks(data.decks);
+      }
     }
     if (data.cards) {
-      await this.saveCards(data.cards);
+      if (mergeWithExisting) {
+        const existingCards = get(cardStore);
+        const mergedCards = [...existingCards, ...data.cards];
+        await this.saveCards(mergedCards);
+      } else {
+        await this.saveCards(data.cards);
+      }
     }
     if (data.settings) {
       await this.saveSettings(data.settings);
@@ -146,13 +158,6 @@ class StorageService {
       await this.localStorageAdapter.saveSettings(settings);
     }
     settingsStore.set(settings);
-    
-    // Recreate adapter if storage type changed
-    if (settings.storageType === 'fileSystemAccess' && isFilesystemSupported() && !this.adapter) {
-      this.adapter = new FileSystemAccessAdapter();
-    } else if (settings.storageType === 'localStorage' && this.adapter) {
-      this.adapter = null;
-    }
   }
 
   async loadDecks() {
@@ -260,7 +265,6 @@ class StorageService {
 
   private getDefaultSettings() {
     return {
-      storageType: 'localStorage' as const,
       srsAlgorithm: 'sm2' as const,
       sm2InitialInterval: 1,
       sm2EasyInterval: 4,

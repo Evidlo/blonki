@@ -8,7 +8,6 @@
   import type { Settings } from '../types';
 
   let settings: Settings = {
-    storageType: 'localStorage',
     srsAlgorithm: 'sm2',
     sm2InitialInterval: 1,
     sm2EasyInterval: 4,
@@ -115,7 +114,6 @@
 
   function resetToDefaults() {
     settings = {
-      storageType: 'localStorage',
       srsAlgorithm: 'sm2',
       sm2InitialInterval: 1,
       sm2EasyInterval: 4,
@@ -132,36 +130,20 @@
   <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Settings</h2>
 
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
-    <!-- Storage Settings -->
+    <!-- Storage Information -->
     <div>
       <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Data Storage</h3>
       
       <div class="space-y-4">
-        <div>
-          <label for="storage-type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Storage Type</label>
-          <select
-            id="storage-type"
-            bind:value={settings.storageType}
-            on:change={(e) => updateSetting('storageType', (e.target as HTMLSelectElement).value as 'localStorage' | 'fileSystemAccess')}
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <option value="localStorage">Browser Local Storage</option>
-            <option value="fileSystemAccess" disabled={!filesystemSupported}>
-              File System Access {!filesystemSupported ? '(Not Supported)' : ''}
-            </option>
-          </select>
-          {#if !filesystemSupported}
-            <p class="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
-              File System Access API is not supported in this browser. Using Local Storage instead.
-            </p>
-          {:else if settings.storageType === 'fileSystemAccess'}
-            <div class="mt-4 space-y-2">
-              <p class="text-sm text-gray-600 dark:text-gray-400">
-                File System Access allows you to link decks to .apkg files on your disk. 
-                Changes are automatically saved to the linked files.
-              </p>
-            </div>
-          {/if}
+        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <p class="text-sm text-blue-800 dark:text-blue-200">
+            {#if filesystemSupported}
+              <strong>File System Access API</strong> is supported in this browser. 
+              Decks will be automatically linked to .apkg files on your disk, and changes are saved directly to those files.
+            {:else}
+              <strong>Browser Storage</strong> is being used. File System Access API is not supported in this browser.
+            {/if}
+          </p>
         </div>
       </div>
     </div>

@@ -2,7 +2,6 @@ import { writable } from 'svelte/store';
 import type { Settings } from '../types';
 
 const defaultSettings: Settings = {
-  storageType: 'localStorage',
   srsAlgorithm: 'sm2',
   sm2InitialInterval: 1,
   sm2EasyInterval: 4,
