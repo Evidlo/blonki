@@ -60,7 +60,7 @@
     <!-- Keyboard Shortcuts -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <h2 class="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Keyboard Shortcuts</h2>
-      <div class="grid md:grid-cols-2 gap-6">
+      <div class="grid md:grid-cols-3 gap-6">
         <div>
           <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Study Interface</h3>
           <div class="space-y-2">
@@ -75,27 +75,48 @@
           </div>
         </div>
         <div>
+          <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-3">SRS Quality Responses</h3>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-gray-700 dark:text-gray-300">Again (1)</span>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">1</kbd>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-700 dark:text-gray-300">Hard (2)</span>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">2</kbd>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-700 dark:text-gray-300">Good (3)</span>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">3</kbd>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-700 dark:text-gray-300">Easy (4)</span>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">4</kbd>
+            </div>
+          </div>
+        </div>
+        <div>
           <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Navigation</h3>
           <div class="space-y-2">
             <div class="flex justify-between items-center">
               <span class="text-gray-700 dark:text-gray-300">Switch to Deck tab</span>
-              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">1</kbd>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">6</kbd>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-gray-700 dark:text-gray-300">Switch to Stats tab</span>
-              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">2</kbd>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">7</kbd>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-gray-700 dark:text-gray-300">Switch to Settings tab</span>
-              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">3</kbd>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">8</kbd>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-gray-700 dark:text-gray-300">Switch to Extras tab</span>
-              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">4</kbd>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">9</kbd>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-gray-700 dark:text-gray-300">Switch to Info tab</span>
-              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">5</kbd>
+              <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono">0</kbd>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-gray-700 dark:text-gray-300">Go Back</span>

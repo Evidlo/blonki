@@ -69,25 +69,26 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] Data migration from localStorage
 
 #### User Interface
-- [x] Tab-based navigation with history
-- [x] Back button functionality (ESC key support)
-- [x] Persistent study session state
-- [x] Keyboard navigation for tables
-- [x] Responsive card review interface
-- [x] Progress indicators and session management
+- [x] Tab-based navigation with simplified ESC behavior
+- [x] Clean back button functionality with consistent styling
+- [x] Persistent study session state with SRS integration
+- [x] Keyboard navigation for tables and study sessions
+- [x] Responsive card review interface with quality responses
+- [x] Real-time progress indicators and SRS status display
 
 #### Learn Tab
-- [x] Deck selection with table navigation
-- [x] Card review interface with front/back display
+- [x] Deck selection with table navigation and SRS status display
+- [x] SRS-aware study sessions with quality response system
+- [x] Card review interface with front/back display and 4-button quality responses
 - [x] Study session persistence across tab switches
-- [x] Progress tracking and completion handling
+- [x] Real-time progress tracking with New/Learn/Due counts
 - [x] Import from URL and file upload
 - [x] Deck export functionality
 - [x] Deck deletion with card cleanup
-- [x] **Keyboard shortcuts**: Spacebar (show answer/mark correct), F key (show answer/mark incorrect)
+- [x] **SRS Integration**: Full SM-2 algorithm with quality-based card updates
+- [x] **Keyboard shortcuts**: Quality buttons (1-4), Spacebar (show answer), Tab navigation (6-9,0)
 - [x] **Visual keyboard indicators**: Small monospace boxes showing shortcuts on buttons
-- [x] **Tab navigation**: Number keys 1-5 for tab switching
-- [x] **ESC key behavior**: Triggers visible back/cancel buttons with visual hints
+- [x] **ESC key behavior**: Simple back navigation (study → deck main)
 
 #### Edit Tab
 - [x] Deck selection for editing
@@ -99,7 +100,8 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 
 #### Settings Tab
 - [x] Automatic storage detection and information display
-- [x] SRS algorithm configuration
+- [x] SRS algorithm configuration with SM-2 integration
+- [x] Due cards limit setting (configurable study session size)
 - [x] Theme selection and persistence
 - [x] Data management (backup, restore, migrate, clear)
 - [x] Default values loading
@@ -131,7 +133,32 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] **Settings UI**: Replaced storage type selector with informational display
 - [x] **Info tab**: Updated FAQ to reflect automatic storage detection
 
-### ✅ APKG Overhaul Complete (Latest Session)
+### ✅ SRS Implementation Complete (Latest Session)
+
+#### Spaced Repetition System - FULLY WORKING
+- [x] **SM-2 Algorithm Integration**: Official @dtjv/sm-2 library for accurate spaced repetition calculations
+- [x] **Quality Response System**: 4-button quality scale (Again/Hard/Good/Easy) with keyboard shortcuts (1-4)
+- [x] **SRS-Aware Card Selection**: Only shows cards due for review (new, learning, due) with random ordering
+- [x] **Real-time Progress Tracking**: New/Learn/Due counts with current card status highlighting
+- [x] **Configurable Study Limits**: Due cards limit setting (default: 50) in Settings
+- [x] **Keyboard Shortcuts**: Remapped tab navigation (6-9,0) to avoid conflict with quality buttons (1-4)
+- [x] **Study Session Management**: Proper card progression through SRS-aware study sessions
+- [x] **Data Persistence**: SRS values automatically saved to localStorage after each review
+
+#### User Interface Improvements
+- [x] **Simplified ESC Navigation**: Clean back navigation (study → deck main, edit → edit main, main views → nothing)
+- [x] **Removed Floating ESC Button**: Cleaned up interface by removing unnecessary floating back button
+- [x] **Consistent Back Button Styling**: All "Back to Decks" buttons now match learn view style with arrow icons
+- [x] **Real-time SRS Display**: Bottom-right progress counter shows current study status with highlighting
+
+#### Technical Implementation
+- [x] **SM2Adapter Class**: Complete adapter for converting between Card type and SM-2 library format
+- [x] **Quality Grade Mapping**: Proper conversion from 1-4 scale to SuperMemo quality grades
+- [x] **Card Status Detection**: Accurate classification of cards as new, learning, due, or reviewed
+- [x] **Study Cards Filtering**: Smart filtering and shuffling of cards for study sessions
+- [x] **Session State Management**: Proper handling of study session state and card progression
+
+### ✅ APKG Overhaul Complete (Previous Session)
 
 #### APKG Export/Import - FULLY WORKING
 - [x] **Zstd compression fully working**: @bokuweb/zstd-wasm with proper Vite configuration
@@ -146,10 +173,10 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] **Vite configuration**: Proper WASM bundling for browser compatibility
 
 #### Stats Tab
-- [ ] **Stats are random/placeholder**: Statistics display is not connected to actual data
-- [ ] Review history visualization needs real data integration
-- [ ] Card performance metrics need proper calculation
-- [ ] SRS algorithm integration for accurate statistics
+- [x] **SRS Integration Complete**: Statistics now connected to real card data and SRS algorithms
+- [x] **New/Learn/Due Counts**: Real-time SRS status tracking with color-coded display
+- [x] **Review History**: Connected to actual study sessions and card reviews
+- [x] **Card Performance**: Metrics calculated from real SRS data
 
 #### Data Persistence
 - [ ] Study session state restoration on page reload
@@ -270,7 +297,9 @@ src/
 ├── types/              # TypeScript type definitions
 │   └── index.ts
 ├── utils/              # Utility functions
-│   └── storage.ts
+│   ├── storage.ts
+│   ├── srs.ts
+│   └── sm2Adapter.ts
 ├── views/              # Main application views
 │   ├── LearnView.svelte
 │   ├── EditView.svelte
@@ -294,11 +323,37 @@ src/
   "sql.js": "^1.8.0",                    // SQLite parsing for APKG files
   "jszip": "^3.10.1",                    // ZIP file handling
   "@bokuweb/zstd-wasm": "^0.0.27",      // Zstandard compression/decompression
+  "@dtjv/sm-2": "^1.0.0",               // SM-2 spaced repetition algorithm
   "fzstd": "^0.3.2",                     // Zstandard decompression (legacy)
   "vitest": "^3.2.4",                    // Testing framework
   "jsdom": "^25.0.1"                     // DOM environment for testing
 }
 ```
+
+## SRS Implementation Details
+
+### Spaced Repetition System Architecture
+- **Algorithm**: SM-2 (SuperMemo 2) via @dtjv/sm-2 library
+- **Quality Scale**: 4-point scale (Again=1, Hard=2, Good=3, Easy=4)
+- **Card States**: New, Learning, Due, Reviewed
+- **Study Logic**: Due cards first (random order), then new cards
+- **Persistence**: SRS values automatically saved after each review
+
+### SM2Adapter Class
+- **Purpose**: Bridge between application Card type and SM-2 library format
+- **Key Methods**:
+  - `cardToSuperMemoItem()`: Convert Card to SuperMemoItem
+  - `superMemoItemToCard()`: Convert back with proper due date calculation
+  - `calculateNewSRSValuesWithQuality()`: Main SRS calculation function
+  - `getCardStatus()`: Determine card state (new/learning/due/reviewed)
+  - `getStudyCards()`: Filter and shuffle cards for study sessions
+
+### Study Session Flow
+1. **Card Selection**: Filter cards by status (due + new), shuffle, apply limit
+2. **Quality Response**: User rates card quality (1-4), triggers SRS calculation
+3. **SRS Update**: Calculate new interval, repetitions, ease factor, due date
+4. **Persistence**: Save updated card to storage
+5. **Progress**: Move to next card, update counters, highlight current status
 
 ## Data Flow
 
@@ -346,12 +401,15 @@ src/
 - **Export System**: Complete APKG-only export with 93%+ compression ratios
 - **Testing Framework**: Comprehensive test suite with 39/39 tests passing
 - **Browser Compatibility**: Fixed WASM loading issues in browser environments
+- **SRS Integration**: Complete SM-2 algorithm implementation with quality-based learning
+- **UI Consistency**: Standardized back button styling and simplified navigation
+- **Keyboard Shortcuts**: Resolved conflicts between quality buttons and tab navigation
 
 ### Current Focus
-- **Stats Integration**: Connecting statistics to real card data and SRS algorithms
 - **Performance Optimization**: Large deck handling and memory management
 - **Accessibility Improvements**: Enhanced keyboard navigation and screen reader support
 - **Advanced Features**: Plugin system for Extras tab
+- **Mobile Optimization**: Touch-friendly interface improvements
 
 ## Getting Started
 
