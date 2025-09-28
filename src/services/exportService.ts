@@ -7,7 +7,7 @@ import type { Deck, Card, Settings } from '../types';
 
 export interface ExportOptions {
   deckIds?: string[];
-  format: 'json' | 'apkg';
+  format: 'apkg';
   includeSettings?: boolean;
 }
 
@@ -43,14 +43,8 @@ class ExportService {
         throw new Error('No decks selected for export');
       }
 
-      switch (format) {
-        case 'json':
-          return await this.exportJSON(selectedDecks, selectedCards, includeSettings ? settings : undefined);
-        case 'apkg':
-          return await this.exportAPKG(selectedDecks, selectedCards);
-        default:
-          throw new Error(`Unsupported export format: ${format}`);
-      }
+      // Only APKG format is supported
+      return await this.exportAPKG(selectedDecks, selectedCards);
     } catch (error) {
       console.error('Export failed:', error);
       return {
@@ -60,50 +54,55 @@ class ExportService {
     }
   }
 
-  private async exportJSON(
-    decks: Deck[], 
-    cards: Card[], 
-    settings?: Settings
-  ): Promise<ExportResult> {
-    const exportData = {
-      decks,
-      cards,
-      settings,
-      exportedAt: new Date().toISOString(),
-      version: '1.0.0'
-    };
-
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const filename = `blonki-export-${new Date().toISOString().split('T')[0]}.json`;
-
-    return {
-      success: true,
-      message: `Successfully exported ${decks.length} decks and ${cards.length} cards`,
-      data: blob,
-      filename
-    };
-  }
 
   private async exportAPKG(decks: Deck[], cards: Card[]): Promise<ExportResult> {
     try {
+      console.log('Starting APKG export:', {
+        deckCount: decks.length,
+        cardCount: cards.length,
+        deckNames: decks.map(d => d.name)
+      });
+
+      // Validate data before export
+      if (decks.length === 0) {
+        throw new Error('No decks to export');
+      }
+
+      if (cards.length === 0) {
+        throw new Error('No cards to export');
+      }
+
       // Generate proper APKG file
       const apkgData = await this.apkgGenerator.generateAPKG(decks, cards, {
         includeSettings: true
       });
 
+      if (!apkgData || apkgData.length === 0) {
+        throw new Error('Generated APKG file is empty');
+      }
+
       const blob = new Blob([apkgData], { type: 'application/zip' });
-      const filename = `blonki-export-${new Date().toISOString().split('T')[0]}.apkg`;
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = decks.length === 1 
+        ? `${decks[0].name.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.apkg`
+        : `blonki-export-${timestamp}.apkg`;
+
+      console.log('APKG export completed:', {
+        filename,
+        size: apkgData.length,
+        blobSize: blob.size
+      });
 
       return {
         success: true,
-        message: `Successfully exported ${decks.length} decks and ${cards.length} cards as APKG`,
+        message: `Successfully exported ${decks.length} deck${decks.length === 1 ? '' : 's'} and ${cards.length} card${cards.length === 1 ? '' : 's'} as APKG`,
         data: blob,
         filename
       };
     } catch (error) {
       console.error('APKG generation failed:', error);
-      throw new Error(`Failed to generate APKG file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      throw new Error(`Failed to generate APKG file: ${errorMessage}`);
     }
   }
 
@@ -129,25 +128,25 @@ class ExportService {
     URL.revokeObjectURL(url);
   }
 
-  async exportDeck(deckId: string, format: 'json' | 'apkg' = 'json'): Promise<void> {
+  async exportDeck(deckId: string): Promise<void> {
     await this.downloadExport({
       deckIds: [deckId],
-      format,
+      format: 'apkg',
       includeSettings: false
     });
   }
 
-  async exportAllDecks(format: 'json' | 'apkg' = 'json'): Promise<void> {
+  async exportAllDecks(): Promise<void> {
     await this.downloadExport({
-      format,
+      format: 'apkg',
       includeSettings: true
     });
   }
 
-  async exportSelectedDecks(deckIds: string[], format: 'json' | 'apkg' = 'json'): Promise<void> {
+  async exportSelectedDecks(deckIds: string[]): Promise<void> {
     await this.downloadExport({
       deckIds,
-      format,
+      format: 'apkg',
       includeSettings: false
     });
   }

@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [svelte()],
   base: '/blonki/',
   optimizeDeps: {
-    include: ['sql.js']
+    include: ['sql.js'],
+    exclude: ['@bokuweb/zstd-wasm'],
+    esbuildOptions: {
+      target: 'es2020',
+    },
   }
 })

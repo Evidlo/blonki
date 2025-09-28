@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { decompress } from 'fzstd';
+import * as zstd from '@bokuweb/zstd-wasm';
 import initSqlJs from 'sql.js';
 import type { Deck, Card } from '../types';
 
@@ -205,18 +206,48 @@ export class APKGParser {
   }
 
   private parseFieldsString(fieldsData: string): string[] {
+    if (!fieldsData || typeof fieldsData !== 'string') {
+      console.warn('Invalid fields data:', fieldsData);
+      return ['', ''];
+    }
+
+    console.log('Parsing fields data:', {
+      length: fieldsData.length,
+      firstChars: fieldsData.substring(0, 50),
+      hasUnitSeparator: fieldsData.includes('\x1F'),
+      hasPipe: fieldsData.includes('|'),
+      hasComma: fieldsData.includes(','),
+      hasSemicolon: fieldsData.includes(';')
+    });
+
     // Anki stores fields separated by Unicode unit separator (U+001F)
     const unitSeparator = '\x1F';
     
     // Try Unicode unit separator first (most common in Anki)
     if (fieldsData.includes(unitSeparator)) {
       const fields = fieldsData.split(unitSeparator);
+      console.log(`Split by unit separator: ${fields.length} fields`);
       return fields.map(field => this.cleanField(field));
     }
     
     // Fallback to pipe-separated (older Anki versions)
     if (fieldsData.includes('|')) {
       const fields = fieldsData.split('|');
+      console.log(`Split by pipe: ${fields.length} fields`);
+      return fields.map(field => this.cleanField(field));
+    }
+    
+    // Try comma-separated (some exports)
+    if (fieldsData.includes(',')) {
+      const fields = fieldsData.split(',');
+      console.log(`Split by comma: ${fields.length} fields`);
+      return fields.map(field => this.cleanField(field));
+    }
+    
+    // Try semicolon-separated (some exports)
+    if (fieldsData.includes(';')) {
+      const fields = fieldsData.split(';');
+      console.log(`Split by semicolon: ${fields.length} fields`);
       return fields.map(field => this.cleanField(field));
     }
     
@@ -224,48 +255,116 @@ export class APKGParser {
     try {
       const parsed = JSON.parse(fieldsData);
       if (Array.isArray(parsed)) {
+        console.log(`Parsed as JSON array: ${parsed.length} fields`);
         return parsed.map(field => this.cleanField(field));
       }
     } catch (e) {
       // Not JSON format
+      console.log('Not JSON format, trying other methods');
     }
     
-    // Single field
-    return [this.cleanField(fieldsData)];
+    // Try to detect if it's a single field that might be HTML
+    if (fieldsData.trim().length > 0) {
+      console.log('Treating as single field');
+      return [this.cleanField(fieldsData), ''];
+    }
+    
+    // Empty or invalid data
+    console.warn('No valid field data found');
+    return ['', ''];
   }
 
   private cleanField(field: string): string {
     if (!field) return '';
     
+    console.log('Cleaning field:', {
+      original: field.substring(0, 100),
+      length: field.length,
+      hasQuotes: field.startsWith("'") && field.endsWith("'"),
+      hasEscaping: field.includes('\\')
+    });
+    
     // Remove SQL escaping and quotes
-    return field
+    let cleaned = field
       .replace(/^'|'$/g, '') // Remove surrounding quotes
       .replace(/''/g, "'") // Unescape single quotes
       .replace(/\\n/g, '\n') // Unescape newlines
       .replace(/\\t/g, '\t') // Unescape tabs
       .replace(/\\r/g, '\r') // Unescape carriage returns
       .replace(/\\\\/g, '\\') // Unescape backslashes
+      .replace(/\\"/g, '"') // Unescape double quotes
+      .replace(/\\'/g, "'") // Unescape single quotes
       .trim();
+    
+    // Handle empty fields that might have been null/undefined
+    if (cleaned === 'null' || cleaned === 'undefined' || cleaned === '') {
+      return '';
+    }
+    
+    console.log('Cleaned field result:', {
+      cleaned: cleaned.substring(0, 100),
+      length: cleaned.length
+    });
+    
+    return cleaned;
   }
 
   private cleanHtml(html: string): string {
-    // Simple HTML cleaning - remove tags and decode entities
-    return html
-      .replace(/<[^>]*>/g, '') // Remove HTML tags
+    if (!html) return '';
+    
+    console.log('Cleaning HTML:', {
+      original: html.substring(0, 100),
+      length: html.length,
+      hasTags: /<[^>]*>/.test(html),
+      hasEntities: /&[a-zA-Z0-9#]+;/.test(html)
+    });
+    
+    // More comprehensive HTML cleaning with better entity handling
+    let cleaned = html
+      // Decode HTML entities first
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&amp;/g, '&')
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&#x27;/g, "'")
       .replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/&hellip;/g, '...')
+      .replace(/&mdash;/g, '—')
+      .replace(/&ndash;/g, '–')
+      .replace(/&copy;/g, '©')
+      .replace(/&reg;/g, '®')
+      .replace(/&trade;/g, '™')
+      // Handle numeric entities
+      .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+      .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
+      // Remove HTML tags but preserve line breaks
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p[^>]*>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<div[^>]*>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<[^>]*>/g, '') // Remove remaining HTML tags
+      // Normalize whitespace
+      .replace(/\n\s*\n/g, '\n') // Multiple newlines to single
+      .replace(/[ \t]+/g, ' ') // Multiple spaces/tabs to single space
+      .replace(/\n /g, '\n') // Remove leading spaces after newlines
+      .replace(/ \n/g, '\n') // Remove trailing spaces before newlines
       .trim();
+    
+    console.log('Cleaned HTML result:', {
+      cleaned: cleaned.substring(0, 100),
+      length: cleaned.length
+    });
+    
+    return cleaned;
   }
 }
 
 // APKG Generator - for creating APKG files
 export class APKGGenerator {
   private sqlJs: any = null;
+  private zstdInitialized = false;
 
   async initialize() {
     if (!this.sqlJs) {
@@ -279,9 +378,44 @@ export class APKGGenerator {
         }
       });
     }
+
+    if (!this.zstdInitialized) {
+      try {
+        console.log('🔧 Initializing Zstd WASM module...');
+        console.log('🔧 Zstd library version:', zstd);
+        console.log('🔧 Zstd.init function:', typeof zstd.init);
+        
+        // Initialize Zstd using Vite bundler approach (no path needed)
+        console.log('🔧 Initializing Zstd with Vite bundler...');
+        await zstd.init();
+        console.log('🔧 ✅ Zstd WASM module loaded successfully via Vite');
+        
+        console.log('🔧 ✅ Zstd WASM module initialized successfully');
+        console.log('🔧 Zstd functions available:', Object.keys(zstd));
+        this.zstdInitialized = true;
+      } catch (error) {
+        console.error('🔧 ❌ Failed to initialize Zstd WASM module:', error);
+        console.error('🔧 ❌ Error details:', {
+          name: error instanceof Error ? error.name : 'Unknown',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : 'No stack trace'
+        });
+        throw new Error(`Zstd initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
   }
 
   async generateAPKG(decks: Deck[], cards: Card[], options: APKGGenerationOptions = {}): Promise<Uint8Array> {
+    try {
+      console.log('Starting APKG generation:', {
+        deckCount: decks.length,
+        cardCount: cards.length,
+        includeSettings: options.includeSettings
+      });
+
+      // Validate input data
+      this.validateInputData(decks, cards);
+
     await this.initialize();
 
     // Create SQLite database
@@ -303,18 +437,77 @@ export class APKGGenerator {
     
     // Export database to bytes
     const dbBytes = db.export();
+    console.log('Database exported, size:', dbBytes.length);
     
-    // For now, we'll skip compression since fzstd is commented out
-    // TODO: Re-enable compression when fzstd is available
-    // const compressedDb = compress(dbBytes);
-    const compressedDb = dbBytes;
+    // Compress the database using Zstandard
+    console.log('🔧 About to call zstd.compress...');
+    console.log('🔧 Zstd object:', zstd);
+    console.log('🔧 Zstd.compress function:', typeof zstd.compress);
+    console.log('🔧 Input data type:', typeof dbBytes, 'Length:', dbBytes.length);
+    
+    let compressedDb: Uint8Array;
+    try {
+      compressedDb = zstd.compress(dbBytes);
+      console.log('🔧 ✅ Database compressed successfully, size:', compressedDb.length);
+    } catch (compressError) {
+      console.error('🔧 ❌ Zstd compression failed:', compressError);
+      console.error('🔧 ❌ Compression error details:', {
+        name: compressError instanceof Error ? compressError.name : 'Unknown',
+        message: compressError instanceof Error ? compressError.message : 'Unknown error',
+        stack: compressError instanceof Error ? compressError.stack : 'No stack trace'
+      });
+      throw compressError;
+    }
     
     // Create ZIP file
     const zip = new JSZip();
+      // Use .anki21b extension for Zstd compressed files
     zip.file('collection.anki21b', compressedDb);
     
     // Generate ZIP file
-    return await zip.generateAsync({ type: 'uint8array' });
+      const zipData = await zip.generateAsync({ 
+        type: 'uint8array',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+      
+      console.log('APKG generation completed, final size:', zipData.length);
+      return zipData;
+    } catch (error) {
+      console.error('APKG generation failed:', error);
+      throw new Error(`Failed to generate APKG: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private validateInputData(decks: Deck[], cards: Card[]): void {
+    if (!decks || decks.length === 0) {
+      throw new Error('No decks provided for APKG generation');
+    }
+
+    if (!cards || cards.length === 0) {
+      throw new Error('No cards provided for APKG generation');
+    }
+
+    // Validate deck structure
+    for (const deck of decks) {
+      if (!deck.id || !deck.name) {
+        throw new Error('Invalid deck: missing id or name');
+      }
+    }
+
+    // Validate card structure
+    for (const card of cards) {
+      if (!card.id || !card.deckId || !card.front || !card.back) {
+        throw new Error('Invalid card: missing required fields (id, deckId, front, back)');
+      }
+    }
+
+    // Check that all cards belong to valid decks
+    const deckIds = new Set(decks.map(d => d.id));
+    const invalidCards = cards.filter(c => !deckIds.has(c.deckId));
+    if (invalidCards.length > 0) {
+      throw new Error(`Found ${invalidCards.length} cards with invalid deck IDs`);
+    }
   }
 
   private initializeAnkiSchema(db: any) {
@@ -411,7 +604,9 @@ export class APKGGenerator {
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
-    for (const deck of decks) {
+    for (let i = 0; i < decks.length; i++) {
+      const deck = decks[i];
+      const deckId = i + 1; // Use numeric ID for SQLite
       const config = JSON.stringify({
         new: { perDay: 20, delays: [1, 10] },
         rev: { perDay: 200, fuzz: 0.1, ivlFct: 1, maxIvl: 36500, ease4: 1.3, bury: true },
@@ -424,7 +619,7 @@ export class APKGGenerator {
       });
 
       stmt.run([
-        deck.id,
+        deckId,
         deck.name,
         Math.floor(deck.updatedAt.getTime() / 1000),
         0, // usn
@@ -437,9 +632,18 @@ export class APKGGenerator {
   }
 
   private insertCardsAndNotes(db: any, decks: Deck[], cards: Card[]) {
-    // Create a basic model for front/back cards
-    const modelId = 1;
-    this.insertModel(db, modelId);
+    // Create multiple models for different card types
+    const basicModelId = 1;
+    const clozeModelId = 2;
+    
+    this.insertBasicModel(db, basicModelId);
+    this.insertClozeModel(db, clozeModelId);
+
+    // Create deck ID mapping
+    const deckIdMap = new Map<string, number>();
+    decks.forEach((deck, index) => {
+      deckIdMap.set(deck.id, index + 1);
+    });
 
     const noteStmt = db.prepare(`
       INSERT OR REPLACE INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
@@ -451,15 +655,29 @@ export class APKGGenerator {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const card of cards) {
-      const noteId = card.id;
-      const cardId = card.id;
-      const deckId = card.deckId;
+    console.log(`Inserting ${cards.length} cards and notes`);
+
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const noteId = i + 1; // Use numeric ID for SQLite
+      const cardId = i + 1; // Use numeric ID for SQLite
+      const deckId = deckIdMap.get(card.deckId) || 1; // Use mapped deck ID
       
-      // Create note
-      const fields = `${card.front}\x1f${card.back}`;
-      const sortField = card.front;
+      // Determine if this is a cloze deletion card
+      const isCloze = this.isClozeCard(card);
+      const modelId = isCloze ? clozeModelId : basicModelId;
+      
+      // Create note with appropriate fields
+      const fields = this.createNoteFields(card, isCloze);
+      const sortField = this.getSortField(card, isCloze);
       const checksum = this.calculateChecksum(sortField);
+      
+      console.log(`Creating note for card ${card.id}:`, {
+        isCloze,
+        modelId,
+        fields: fields.substring(0, 100),
+        sortField: sortField.substring(0, 50)
+      });
       
       noteStmt.run([
         noteId,
@@ -475,15 +693,19 @@ export class APKGGenerator {
         '' // data
       ]);
 
-      // Create card
+      // Create card(s) - cloze cards might have multiple cards per note
+      const cardTemplates = this.getCardTemplates(card, isCloze);
+      
+      for (let j = 0; j < cardTemplates.length; j++) {
+        const template = cardTemplates[j];
       const due = this.calculateDue(card);
       const interval = Math.max(1, card.interval);
       
       cardStmt.run([
-        cardId,
+          cardId + j, // Unique card ID (numeric)
         noteId,
         deckId,
-        0, // ord (card template order)
+          j, // ord (card template order)
         Math.floor(card.updatedAt.getTime() / 1000),
         0, // usn
         0, // type (0 = new, 1 = learning, 2 = review, 3 = relearning)
@@ -499,13 +721,57 @@ export class APKGGenerator {
         0, // flags
         '' // data
       ]);
+      }
     }
 
     noteStmt.free();
     cardStmt.free();
   }
 
-  private insertModel(db: any, modelId: number) {
+  private isClozeCard(card: Card): boolean {
+    // Check if the card contains cloze deletion syntax {{c1::text}}
+    return /{{c\d+::[^}]+}}/.test(card.front) || /{{c\d+::[^}]+}}/.test(card.back);
+  }
+
+  private createNoteFields(card: Card, isCloze: boolean): string {
+    if (isCloze) {
+      // For cloze cards, use the front as the text field
+      return `${card.front}\x1f${card.back || ''}`;
+    } else {
+      // For basic cards, use front and back
+      return `${card.front}\x1f${card.back}`;
+    }
+  }
+
+  private getSortField(card: Card, isCloze: boolean): string {
+    if (isCloze) {
+      // For cloze cards, use the text without cloze markers
+      return card.front.replace(/{{c\d+::([^}]+)}}/g, '$1');
+    } else {
+      // For basic cards, use the front
+      return card.front;
+    }
+  }
+
+  private getCardTemplates(card: Card, isCloze: boolean): any[] {
+    if (isCloze) {
+      // Extract cloze numbers and create templates for each
+      const clozeMatches = card.front.match(/{{c(\d+)::[^}]+}}/g);
+      if (clozeMatches) {
+        const clozeNumbers = [...new Set(clozeMatches.map(m => {
+          const match = m.match(/{{c(\d+)::/);
+          return match ? parseInt(match[1]) : 1;
+        }))];
+        return clozeNumbers.map(num => ({ clozeNumber: num }));
+      }
+      return [{ clozeNumber: 1 }]; // Default to c1
+    } else {
+      // Basic card has one template
+      return [{}];
+    }
+  }
+
+  private insertBasicModel(db: any, modelId: number) {
     const model = {
       id: modelId,
       name: 'Basic',
@@ -551,10 +817,81 @@ export class APKGGenerator {
       vers: []
     };
 
-    // Update the col table with the model
+    this.insertModelIntoCollection(db, modelId, model);
+  }
+
+  private insertClozeModel(db: any, modelId: number) {
+    const model = {
+      id: modelId,
+      name: 'Cloze',
+      type: 1, // Cloze type
+      mod: Math.floor(Date.now() / 1000),
+      usn: 0,
+      sortf: 0,
+      did: 1,
+      tmpls: [{
+        name: 'Cloze',
+        ord: 0,
+        qfmt: '{{cloze:Text}}',
+        afmt: '{{cloze:Text}}<br><br>{{Extra}}',
+        did: null,
+        bqfmt: '',
+        bafmt: ''
+      }],
+      req: [[[0, 'all', [0]]]],
+      flds: [
+        {
+          name: 'Text',
+          ord: 0,
+          sticky: false,
+          rtl: false,
+          font: 'Arial',
+          size: 20,
+          media: []
+        },
+        {
+          name: 'Extra',
+          ord: 1,
+          sticky: false,
+          rtl: false,
+          font: 'Arial',
+          size: 20,
+          media: []
+        }
+      ],
+      css: '.card {\n font-family: arial;\n font-size: 20px;\n text-align: center;\n color: black;\n background-color: white;\n}\n\n.cloze {\n font-weight: bold;\n color: blue;\n}',
+      latexPre: '\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n',
+      latexPost: '\\end{document}',
+      latexsvg: false,
+      vers: []
+    };
+
+    this.insertModelIntoCollection(db, modelId, model);
+  }
+
+  private insertModelIntoCollection(db: any, modelId: number, model: any) {
+    // Get existing models
+    const colResult = db.exec("SELECT models FROM col WHERE id = 1");
+    let models = {};
+    
+    if (colResult.length > 0 && colResult[0].values.length > 0) {
+      try {
+        models = JSON.parse(colResult[0].values[0][0] as string) || {};
+      } catch (e) {
+        console.warn('Could not parse existing models, starting fresh');
+        models = {};
+      }
+    }
+    
+    // Add the new model
+    (models as any)[modelId] = model;
+    
+    // Update the col table with all models
     const colStmt = db.prepare('UPDATE col SET models = ? WHERE id = 1');
-    colStmt.run([JSON.stringify({ [modelId]: model })]);
+    colStmt.run([JSON.stringify(models)]);
     colStmt.free();
+    
+    console.log(`Inserted model ${modelId} (${model.name})`);
   }
 
   private insertSettings(db: any) {
