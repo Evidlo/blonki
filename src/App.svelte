@@ -23,9 +23,7 @@
 
   // Handle keyboard navigation
   function handleKeydown(event: KeyboardEvent) {
-    console.log(`Key pressed: ${event.key}, target:`, event.target);
     const handled = keyboardService.handleKeydown(event);
-    console.log(`Keyboard event handled: ${handled}`);
   }
 
   function navigateToView(view: AppState['currentView']) {

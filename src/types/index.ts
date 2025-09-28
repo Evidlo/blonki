@@ -54,6 +54,11 @@ export interface Settings {
   theme: 'light' | 'dark' | 'auto';
   cardsPerSession: number;
   dueCardsLimit: number;
+  // OpenAI settings
+  openaiEndpoint: string;
+  openaiApiKey: string;
+  openaiModel: string;
+  openaiModels: string[];
 }
 
 // Storage types

@@ -9,7 +9,11 @@ const defaultSettings: Settings = {
   sm2MaxInterval: 36500,
   theme: 'auto',
   cardsPerSession: 20,
-  dueCardsLimit: 50
+  dueCardsLimit: 50,
+  openaiEndpoint: 'https://api.openai.com',
+  openaiApiKey: '',
+  openaiModel: '',
+  openaiModels: []
 };
 
 export const settingsStore = writable<Settings>(defaultSettings);

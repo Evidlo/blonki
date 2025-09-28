@@ -5,6 +5,7 @@
   import { storageService } from '../services/storageService';
   import { themeService } from '../services/themeService';
   import { isFilesystemSupported } from '../utils/storage';
+  import { OpenAIService } from '../services/openaiService';
   import type { Settings } from '../types';
 
   let settings: Settings = {
@@ -15,10 +16,21 @@
     sm2MaxInterval: 36500,
     theme: 'auto',
     cardsPerSession: 20,
-    dueCardsLimit: 50
+    dueCardsLimit: 50,
+    openaiEndpoint: 'https://api.openai.com',
+    openaiApiKey: '',
+    openaiModel: '',
+    openaiModels: []
   };
 
   let filesystemSupported = false;
+  let isLoadingModels = false;
+  let openaiError = '';
+
+  // Reactive computed values for button state
+  $: hasValidEndpoint = settings?.openaiEndpoint && settings.openaiEndpoint.trim() !== '';
+  $: hasValidApiKey = settings?.openaiApiKey && settings.openaiApiKey.trim() !== '';
+  $: canListModels = hasValidEndpoint && hasValidApiKey && !isLoadingModels;
 
   onMount(() => {
     loadSettings();
@@ -122,9 +134,37 @@
       sm2MaxInterval: 36500,
       theme: 'auto',
       cardsPerSession: 20,
-      dueCardsLimit: 50
+      dueCardsLimit: 50,
+      openaiEndpoint: 'https://api.openai.com',
+      openaiApiKey: '',
+      openaiModel: '',
+      openaiModels: []
     };
     settingsStore.set(settings);
+  }
+
+  async function listOpenAIModels() {
+    if (!settings.openaiEndpoint || !settings.openaiApiKey) {
+      openaiError = 'Please enter both endpoint and API key';
+      return;
+    }
+
+    isLoadingModels = true;
+    openaiError = '';
+
+    try {
+      const openaiService = new OpenAIService(settings.openaiEndpoint, settings.openaiApiKey);
+      const models = await openaiService.listModels();
+      
+      settings = { ...settings, openaiModels: models };
+      settingsStore.set(settings);
+      await storageService.saveSettings(settings);
+    } catch (error) {
+      openaiError = error instanceof Error ? error.message : 'Failed to list models';
+      console.error('Failed to list OpenAI models:', error);
+    } finally {
+      isLoadingModels = false;
+    }
   }
 </script>
 
@@ -267,6 +307,89 @@
             max="200"
           />
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum number of due cards to study in one session</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- OpenAI Settings -->
+    <div>
+      <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">OpenAI Integration</h3>
+      
+      <div class="space-y-4">
+        <div>
+          <label for="openai-endpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">API Endpoint</label>
+          <input
+            id="openai-endpoint"
+            type="url"
+            bind:value={settings.openaiEndpoint}
+            on:change={(e) => updateSetting('openaiEndpoint', (e.target as HTMLInputElement).value)}
+            placeholder="https://api.openai.com"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">OpenAI-compatible API endpoint (e.g., OpenAI, Ollama, etc.)</p>
+        </div>
+
+        <div>
+          <label for="openai-api-key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">API Key</label>
+          <input
+            id="openai-api-key"
+            type="password"
+            bind:value={settings.openaiApiKey}
+            on:change={(e) => updateSetting('openaiApiKey', (e.target as HTMLInputElement).value)}
+            placeholder="sk-..."
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">API key for authentication (sent as Authorization: Bearer header)</p>
+        </div>
+
+        <div class="flex gap-4 items-end">
+          <div class="flex-1">
+            <label for="openai-model" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Model</label>
+            <select
+              id="openai-model"
+              bind:value={settings.openaiModel}
+              on:change={(e) => updateSetting('openaiModel', (e.target as HTMLSelectElement).value)}
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              disabled={!settings.openaiModels || settings.openaiModels.length === 0}
+            >
+              <option value="">Select a model...</option>
+              {#each (settings.openaiModels || []) as model}
+                <option value={model}>{model}</option>
+              {/each}
+            </select>
+          </div>
+          
+          <div>
+            <button
+              type="button"
+              on:click={listOpenAIModels}
+              disabled={!canListModels}
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoadingModels ? 'Loading...' : 'List Models'}
+            </button>
+          </div>
+        </div>
+
+        {#if openaiError}
+          <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p class="text-sm text-red-800 dark:text-red-200">{openaiError}</p>
+          </div>
+        {/if}
+
+        {#if settings.openaiModels && settings.openaiModels.length > 0}
+          <div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+            <p class="text-sm text-green-800 dark:text-green-200">
+              Found {settings.openaiModels.length} model{settings.openaiModels.length === 1 ? '' : 's'} available
+            </p>
+          </div>
+        {/if}
+
+        <!-- Debug info (remove in production) -->
+        <div class="p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs text-gray-600 dark:text-gray-400">
+          <p>Debug: Endpoint="{settings?.openaiEndpoint || 'undefined'}" (valid: {hasValidEndpoint})</p>
+          <p>Debug: API Key="{settings?.openaiApiKey ? '***' + settings.openaiApiKey.slice(-4) : 'empty'}" (valid: {hasValidApiKey})</p>
+          <p>Debug: Can list models: {canListModels}</p>
         </div>
       </div>
     </div>
