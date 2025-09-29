@@ -87,7 +87,7 @@
 </script>
 
 <div class="space-y-6">
-  <h2 class="text-xl font-semibold text-gray-900">Statistics</h2>
+  <h2 class="text-xl font-semibold text-gray-900">Statistics (page under construction)</h2>
 
   <!-- Summary Cards -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-6">

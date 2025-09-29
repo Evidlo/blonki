@@ -385,12 +385,6 @@
           </div>
         {/if}
 
-        <!-- Debug info (remove in production) -->
-        <div class="p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs text-gray-600 dark:text-gray-400">
-          <p>Debug: Endpoint="{settings?.openaiEndpoint || 'undefined'}" (valid: {hasValidEndpoint})</p>
-          <p>Debug: API Key="{settings?.openaiApiKey ? '***' + settings.openaiApiKey.slice(-4) : 'empty'}" (valid: {hasValidApiKey})</p>
-          <p>Debug: Can list models: {canListModels}</p>
-        </div>
       </div>
     </div>
 

@@ -42,6 +42,9 @@
     }
   });
 
+  // Reactive statement to find the current deck
+  $: currentDeck = selectedDeck ? decks.find(d => d.id === selectedDeck) : null;
+
   onMount(() => {
     // Reset selected deck when entering Learn view
     selectedDeckStore.set(null);
@@ -631,7 +634,7 @@
   <!-- Cards List View -->
   <div class="space-y-6">
     <div class="flex justify-between items-center">
-      <h2 class="text-xl font-semibold text-gray-900">Cards in Deck</h2>
+      <h2 class="text-xl font-semibold text-gray-900">{currentDeck?.name || 'Deck'}</h2>
       <div class="flex space-x-2">
         <button
           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"

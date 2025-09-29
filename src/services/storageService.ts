@@ -24,6 +24,9 @@ class StorageService {
       this.adapter = new FileSystemAccessAdapter();
     }
     
+    // Migrate data from localStorage to IndexedDB if needed
+    await this.migrateToIndexedDB();
+    
     // Load initial data using the appropriate adapter
     await this.loadDecks();
     await this.loadCards();
@@ -41,7 +44,7 @@ class StorageService {
     if (!this.adapter) {
       throw new Error('File System Access API not supported');
     }
-    this.adapter.unlinkDeckFromFile(deckId);
+    await this.adapter.unlinkDeckFromFile(deckId);
   }
 
   getDeckFilePath(deckId: string): string {
@@ -124,6 +127,35 @@ class StorageService {
     await this.importData(data);
   }
 
+  async migrateToIndexedDB() {
+    // Check if we need to migrate from localStorage to IndexedDB
+    const migrationKey = 'blonki_migrated_to_indexeddb';
+    const hasMigrated = localStorage.getItem(migrationKey);
+    
+    if (!hasMigrated) {
+      console.log('Migrating data from localStorage to IndexedDB...');
+      
+      try {
+        // Load data from localStorage
+        const localDecks = await this.localStorageAdapter.loadDecks();
+        const localCards = await this.localStorageAdapter.loadCards();
+        
+        // If we have an adapter (FileSystemAccess with IndexedDB), migrate the data
+        if (this.adapter) {
+          await this.adapter.saveDecks(localDecks);
+          await this.adapter.saveCards(localCards);
+          console.log(`Migrated ${localDecks.length} decks and ${localCards.length} cards to IndexedDB`);
+        }
+        
+        // Mark migration as complete
+        localStorage.setItem(migrationKey, 'true');
+        console.log('Migration to IndexedDB completed');
+      } catch (error) {
+        console.error('Failed to migrate to IndexedDB:', error);
+      }
+    }
+  }
+
   async migrateFromLocalStorage() {
     // This would migrate data from localStorage to the current storage system
     // For now, just load from localStorage
@@ -142,21 +174,14 @@ class StorageService {
 
   // Store interaction methods
   async loadSettings() {
-    if (this.adapter) {
-      const settings = await this.adapter.loadSettings();
-      settingsStore.set(settings);
-    } else {
-      const settings = await this.localStorageAdapter.loadSettings();
-      settingsStore.set(settings);
-    }
+    // Settings always use localStorage
+    const settings = await this.localStorageAdapter.loadSettings();
+    settingsStore.set(settings);
   }
 
   async saveSettings(settings: any) {
-    if (this.adapter) {
-      await this.adapter.saveSettings(settings);
-    } else {
-      await this.localStorageAdapter.saveSettings(settings);
-    }
+    // Settings always use localStorage
+    await this.localStorageAdapter.saveSettings(settings);
     settingsStore.set(settings);
   }
 
@@ -236,7 +261,7 @@ class StorageService {
     
     // If this is a linked deck in File System Access mode, unlink it first
     if (this.adapter && this.isDeckLinkedToFile(deckId)) {
-      this.unlinkDeckFromFile(deckId);
+      await this.unlinkDeckFromFile(deckId);
     }
     
     // Delete all cards in this deck
@@ -271,7 +296,12 @@ class StorageService {
       sm2MinInterval: 1,
       sm2MaxInterval: 36500,
       theme: 'auto' as const,
-      cardsPerSession: 20
+      cardsPerSession: 20,
+      dueCardsLimit: 50,
+      openaiEndpoint: 'https://api.openai.com',
+      openaiApiKey: '',
+      openaiModel: '',
+      openaiModels: []
     };
   }
 }

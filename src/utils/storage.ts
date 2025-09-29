@@ -1,5 +1,6 @@
 import type { StorageAdapter, Deck, Card, Settings, ReviewResult } from '../types';
 import { APKGParser, APKGGenerator } from '../services/apkgFormat';
+import { IndexedDBAdapter } from './indexedDBAdapter';
 
 // Type declarations for Filesystem API
 declare global {
@@ -92,35 +93,67 @@ export class LocalStorageAdapter implements StorageAdapter {
 
   getDefaultSettings(): Settings {
     return {
-      storageType: 'localStorage',
       srsAlgorithm: 'sm2',
       sm2InitialInterval: 1,
       sm2EasyInterval: 4,
       sm2MinInterval: 1,
       sm2MaxInterval: 36500,
       theme: 'auto',
-      cardsPerSession: 20
+      cardsPerSession: 20,
+      dueCardsLimit: 50,
+      openaiEndpoint: 'https://api.openai.com',
+      openaiApiKey: '',
+      openaiModel: '',
+      openaiModels: []
     };
   }
 }
 
 // File System Access API implementation for .apkg file linking
 export class FileSystemAccessAdapter implements StorageAdapter {
-  private localStorageAdapter: LocalStorageAdapter;
+  private indexedDBAdapter: IndexedDBAdapter;
   private fileHandles: Map<string, FileSystemFileHandle> = new Map(); // deckId -> fileHandle
   private filePaths: Map<string, string> = new Map(); // deckId -> display path
   private hasUnsavedChanges: Map<string, boolean> = new Map(); // deckId -> has changes
   private apkgGenerator: APKGGenerator;
 
   constructor() {
-    this.localStorageAdapter = new LocalStorageAdapter();
+    this.indexedDBAdapter = new IndexedDBAdapter();
     this.apkgGenerator = new APKGGenerator();
+    this.initializeFileHandles();
+  }
+
+  // Initialize file handles from IndexedDB
+  private async initializeFileHandles(): Promise<void> {
+    try {
+      const fileHandles = await this.indexedDBAdapter.getAllFileHandles();
+      for (const [deckId, fileHandle] of fileHandles) {
+        this.fileHandles.set(deckId, fileHandle);
+        
+        // Try to get the file path for display
+        try {
+          const file = await fileHandle.getFile();
+          const fullPath = (file as any).path || file.name;
+          this.filePaths.set(deckId, fullPath);
+          console.log(`Restored file handle for deck: ${deckId} (${fullPath})`);
+        } catch (error) {
+          this.filePaths.set(deckId, '[File Permission Error]');
+          console.log(`File handle restored but permission error for deck: ${deckId}`);
+        }
+      }
+      console.log(`Initialized ${fileHandles.size} file handles from IndexedDB`);
+    } catch (error) {
+      console.error('Failed to initialize file handles:', error);
+    }
   }
 
   // Link a deck to a specific .apkg file
   async linkDeckToFile(deckId: string, fileHandle: FileSystemFileHandle): Promise<void> {
     console.log('Linking deck to file:', deckId, fileHandle.name);
     this.fileHandles.set(deckId, fileHandle);
+    
+    // Store file handle in IndexedDB for persistence
+    await this.indexedDBAdapter.storeFileHandle(deckId, fileHandle);
     
     // Try to get the file name for display
     try {
@@ -135,9 +168,10 @@ export class FileSystemAccessAdapter implements StorageAdapter {
   }
 
   // Unlink a deck from its file
-  unlinkDeckFromFile(deckId: string): void {
+  async unlinkDeckFromFile(deckId: string): Promise<void> {
     this.fileHandles.delete(deckId);
     this.filePaths.delete(deckId);
+    await this.indexedDBAdapter.removeFileHandle(deckId);
   }
 
   // Get the file path for a deck (for display)
@@ -219,16 +253,16 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     console.log('FileSystemAccessAdapter.saveDecks called with', decks.length, 'decks');
     console.log('Deck IDs:', decks.map(d => d.id));
     
-    // Save all decks to localStorage as fallback
-    await this.localStorageAdapter.saveDecks(decks);
-    console.log('Decks saved to localStorage');
+    // Save all decks to IndexedDB
+    await this.indexedDBAdapter.saveDecks(decks);
+    console.log('Decks saved to IndexedDB');
     
     // Note: We don't save to file here to avoid permission dialogs on initial load
     // File saving will happen in saveCards when user makes actual edits
   }
 
   async loadDecks(): Promise<Deck[]> {
-    const decks = await this.localStorageAdapter.loadDecks();
+    const decks = await this.indexedDBAdapter.loadDecks();
     
     // Update file paths for linked decks
     return decks.map(deck => ({
@@ -242,8 +276,8 @@ export class FileSystemAccessAdapter implements StorageAdapter {
     console.log('FileSystemAccessAdapter.saveCards called with', cards.length, 'cards');
     console.log('Available file handles:', Array.from(this.fileHandles.keys()));
     
-    // Save all cards to localStorage as fallback
-    await this.localStorageAdapter.saveCards(cards);
+    // Save all cards to IndexedDB
+    await this.indexedDBAdapter.saveCards(cards);
     
     // Mark decks as having unsaved changes and save to file
     const deckIds = new Set(cards.map(card => card.deckId));
@@ -256,14 +290,14 @@ export class FileSystemAccessAdapter implements StorageAdapter {
         this.hasUnsavedChanges.set(deckId, true);
         
         console.log('Saving cards for linked deck:', deckId);
-        const deck = (await this.localStorageAdapter.loadDecks()).find(d => d.id === deckId);
+        const deck = (await this.indexedDBAdapter.loadDecks()).find(d => d.id === deckId);
         if (deck) {
           const deckCards = cards.filter(card => card.deckId === deckId);
           await this.saveDeckToFile(deckId, deck, deckCards);
           // Mark as saved after successful save
           this.hasUnsavedChanges.set(deckId, false);
         } else {
-          console.log('Deck not found in localStorage:', deckId);
+          console.log('Deck not found in IndexedDB:', deckId);
         }
       } else {
         console.log('No file handle for deck:', deckId);
@@ -272,28 +306,29 @@ export class FileSystemAccessAdapter implements StorageAdapter {
   }
 
   async loadCards(): Promise<Card[]> {
-    return await this.localStorageAdapter.loadCards();
-  }
-
-  async saveSettings(settings: Settings): Promise<void> {
-    await this.localStorageAdapter.saveSettings(settings);
-  }
-
-  async loadSettings(): Promise<Settings> {
-    return await this.localStorageAdapter.loadSettings();
+    return await this.indexedDBAdapter.loadCards();
   }
 
   async saveReviewResults(results: ReviewResult[]): Promise<void> {
-    await this.localStorageAdapter.saveReviewResults(results);
+    await this.indexedDBAdapter.saveReviewResults(results);
   }
 
   async loadReviewResults(): Promise<ReviewResult[]> {
-    return await this.localStorageAdapter.loadReviewResults();
+    return await this.indexedDBAdapter.loadReviewResults();
   }
 
-  // Method to save cards only to localStorage without triggering file saves
+  // Settings are handled by localStorage adapter
+  async saveSettings(settings: Settings): Promise<void> {
+    throw new Error('Settings should be saved using LocalStorageAdapter');
+  }
+
+  async loadSettings(): Promise<Settings> {
+    throw new Error('Settings should be loaded using LocalStorageAdapter');
+  }
+
+  // Method to save cards only to IndexedDB without triggering file saves
   async saveCardsToLocalStorageOnly(cards: Card[]): Promise<void> {
-    await this.localStorageAdapter.saveCards(cards);
+    await this.indexedDBAdapter.saveCards(cards);
   }
 }
 

@@ -24,9 +24,11 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 
 #### Storage Abstraction Layer
 - **`StorageAdapter` interface**: Unified storage operations
-- **`LocalStorageAdapter`**: Browser localStorage implementation
-- **`FileSystemAccessAdapter`**: File System Access API implementation for transparent file operations
-- **`StorageService`**: Centralized service managing all storage operations
+- **`LocalStorageAdapter`**: Browser localStorage implementation (used for settings)
+- **`IndexedDBAdapter`**: IndexedDB implementation for large data and file handles
+- **`FileSystemAccessAdapter`**: File System Access API implementation with IndexedDB backend
+- **`StorageService`**: Centralized service managing hybrid storage operations
+- **Hybrid Architecture**: localStorage for settings, IndexedDB for data and file handles
 
 ### Service Layer
 
@@ -36,6 +38,7 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - **`exportService`**: Data export functionality
 - **`themeService`**: Theme management and persistence
 - **`keyboardService`**: Keyboard shortcut handling
+- **`openaiService`**: OpenAI-compatible API integration for AI features
 
 #### APKG Processing
 - **`apkgFormat.ts`**: Combined parser and generator service for APKG files
@@ -105,12 +108,14 @@ Blonki is a web-based Anki client SPA built with Svelte 5 and TypeScript. The ap
 - [x] Theme selection and persistence
 - [x] Data management (backup, restore, migrate, clear)
 - [x] Default values loading
+- [x] **OpenAI Integration**: API endpoint, key, and model selection for AI features
 
 #### Stats Tab
 - [x] Summary metrics display (UI complete)
 - [x] Review history visualization (UI complete)
 - [x] Card performance grid (UI complete)
 - [x] Responsive chart layouts (UI complete)
+- [x] **Status indicator**: "Statistics (page under construction)" title
 - [ ] **Data integration**: Stats display placeholder data, not connected to actual card data
 - [ ] **SRS integration**: Statistics need to be calculated from real review data
 
@@ -288,7 +293,8 @@ src/
 │   ├── exportService.ts
 │   ├── themeService.ts
 │   ├── keyboardService.ts
-│   └── apkgParser.ts
+│   ├── openaiService.ts
+│   └── apkgFormat.ts
 ├── stores/             # Svelte stores for state management
 │   ├── appStore.ts
 │   ├── settingsStore.ts
@@ -298,6 +304,7 @@ src/
 │   └── index.ts
 ├── utils/              # Utility functions
 │   ├── storage.ts
+│   ├── indexedDBAdapter.ts
 │   ├── srs.ts
 │   └── sm2Adapter.ts
 ├── views/              # Main application views
@@ -404,6 +411,35 @@ src/
 - **SRS Integration**: Complete SM-2 algorithm implementation with quality-based learning
 - **UI Consistency**: Standardized back button styling and simplified navigation
 - **Keyboard Shortcuts**: Resolved conflicts between quality buttons and tab navigation
+
+### ✅ Major Architecture Overhaul (Latest Session)
+
+#### Hybrid Storage System - IndexedDB + localStorage
+- **Problem Solved**: FileSystemFileHandle objects were lost on page refresh, causing decks to show as "Browser Storage" and preventing file saving
+- **Solution**: Implemented hybrid storage architecture using IndexedDB for large data and file handles, localStorage for settings
+- **IndexedDBAdapter**: New adapter for storing decks, cards, review results, and FileSystemFileHandle objects
+- **File Handle Persistence**: FileSystemFileHandle objects now persist across page refreshes using IndexedDB
+- **Automatic Migration**: One-time migration from localStorage to IndexedDB preserves all existing data
+- **Performance Benefits**: Better handling of large datasets and complex objects
+
+#### OpenAI Integration
+- **OpenAI Service**: Complete service for OpenAI-compatible API calls (list models, completions)
+- **Settings Integration**: New OpenAI section in Settings with endpoint, API key, and model selection
+- **v1 API Support**: Direct implementation using OpenAI v1 API endpoints (/v1/models, /v1/completions)
+- **CORS Handling**: Proper error handling and connection testing
+- **Extensible Design**: Ready for future Extras features requiring AI integration
+
+#### UI/UX Improvements
+- **Deck Name Headers**: Edit views now show actual deck names instead of generic "Cards in Deck"
+- **Stats Tab Status**: Updated to show "Statistics (page under construction)" for clarity
+- **Debug Cleanup**: Removed console spam from keyboard event logging
+- **Reactive Deck Display**: Dynamic deck name resolution using Svelte reactive statements
+
+#### Technical Implementation Details
+- **File Handle Validation**: Automatic cleanup of invalid file handles on app startup
+- **Error Handling**: Graceful fallback when file handles are lost or permissions revoked
+- **Data Consistency**: Proper synchronization between memory, IndexedDB, and file operations
+- **Migration Safety**: Migration flag prevents duplicate data migration
 
 ### Current Focus
 - **Performance Optimization**: Large deck handling and memory management
