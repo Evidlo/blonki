@@ -38,9 +38,13 @@
   }
 
   // Subscribe to stores
-  deckStore.subscribe(value => decks = value);
+  deckStore.subscribe(value => {
+    console.log('🔍 DEBUG deckStore subscription - decks count:', value.length);
+    decks = value;
+  });
   selectedDeckStore.subscribe(value => selectedDeck = value);
   cardStore.subscribe(value => {
+    console.log('🔍 DEBUG cardStore subscription - cards count:', value.length);
     cards = value;
     // Update SRS counts when cards change - but only if we have a selected deck
     if (selectedDeck) {
@@ -66,12 +70,17 @@
   $: currentDeck = selectedDeck ? decks.find(d => d.id === selectedDeck) : null;
   
   // Reactive statement to update SRS counts for all decks when cards or decks change
-  $: {
+  $: cards, decks, updateSRSCounts();
+  
+  function updateSRSCounts() {
+    console.log('🔍 DEBUG updateSRSCounts called - cards:', cards.length, 'decks:', decks.length);
     deckSRSCounts = {};
     for (const deck of decks) {
       const counts = getSRSCounts(deck.id);
       deckSRSCounts[deck.id] = counts;
+      console.log('🔍 DEBUG Updated SRS counts for deck', deck.id, ':', counts);
     }
+    console.log('🔍 DEBUG Final deckSRSCounts object:', deckSRSCounts);
   }
 
   onMount(async () => {
@@ -115,12 +124,15 @@
     selectedDeckStore.set(deckId);
     await loadCardsForDeck(deckId);
     
-    // Get SRS-aware study cards
+    // Get deck-specific cards for study
+    const deckCards = await storageService.getCardsForDeck(deckId);
+    
+    // Get SRS-aware study cards from deck-specific cards only
     const dueCardsLimit = settings?.dueCardsLimit || 50;
-    studyCards = SM2Adapter.getStudyCards(cards, dueCardsLimit);
+    studyCards = SM2Adapter.getStudyCards(deckCards, dueCardsLimit);
     srsCounts = getSRSCounts(deckId);
     
-    console.log('selectDeck - studyCards:', studyCards.length, 'cards:', studyCards);
+    console.log('selectDeck - studyCards:', studyCards.length, 'deckCards:', deckCards.length);
     
     if (studyCards.length === 0) {
       // No cards due for study
@@ -203,7 +215,6 @@
   async function loadCardsForDeck(deckId: string) {
     try {
       const deckCards = await storageService.getCardsForDeck(deckId);
-      cardStore.set(deckCards);
       if (deckCards.length > 0) {
         currentCardStore.set(deckCards[0]);
         currentCardIndex = 0;

@@ -9,6 +9,7 @@
   import { importService } from '../services/importService';
   import { exportService } from '../services/exportService';
   import { isFilesystemSupported } from '../utils/storage';
+  import { SM2Adapter } from '../utils/sm2Adapter.js';
   import TableNavigation from '../components/TableNavigation.svelte';
   import type { Deck, Card } from '../types';
 
@@ -24,6 +25,7 @@
   let editingCard: Card | null = null;
   let isEditing = false;
   let selectedCardIndex = 0;
+  let currentDeckCards: Card[] = [];
 
   // Subscribe to stores
   deckStore.subscribe(value => decks = value);
@@ -36,9 +38,9 @@
     currentCardIndex = value.currentCardIndex;
     showBack = value.showBack;
     
-    // If we're in study mode, load the current card
-    if (value.isActive && cards.length > 0 && value.currentCardIndex < cards.length) {
-      currentCardStore.set(cards[value.currentCardIndex]);
+    // If we're in study mode, load the current card from currentDeckCards
+    if (value.isActive && currentDeckCards.length > 0 && value.currentCardIndex < currentDeckCards.length) {
+      currentCardStore.set(currentDeckCards[value.currentCardIndex]);
     }
   });
 
@@ -126,7 +128,7 @@
   async function loadCardsForDeck(deckId: string) {
     try {
       const deckCards = await storageService.getCardsForDeck(deckId);
-      cardStore.set(deckCards);
+      currentDeckCards = deckCards; // Store deck-specific cards
       if (deckCards.length > 0) {
         currentCardStore.set(deckCards[0]);
         currentCardIndex = 0;
@@ -143,18 +145,42 @@
     }));
   }
 
-  function handleResponse(response: 'correct' | 'incorrect') {
+  async function handleResponse(response: 'correct' | 'incorrect') {
     if (!currentCard) return;
 
-    // TODO: Update card with SRS algorithm
-    // TODO: Save review result
+    try {
+      // Calculate new SRS values using SM-2 algorithm
+      const newSRSValues = SM2Adapter.calculateNewSRSValues(currentCard, response);
+      
+      // Update the card with new SRS values
+      const updatedCard = {
+        ...currentCard,
+        ...newSRSValues,
+        updatedAt: new Date()
+      };
+      
+      // Save the updated card (use study mode method to avoid file permission prompts)
+      await storageService.updateCardDuringStudy(updatedCard);
+      
+      // Update the current card in the deck cards array
+      if (currentDeckCards.length > 0 && currentCardIndex < currentDeckCards.length) {
+        currentDeckCards[currentCardIndex] = updatedCard;
+      }
+      
+      // Reload cards to reflect changes
+      if (selectedDeck) {
+        await loadCardsForDeck(selectedDeck);
+      }
+    } catch (error) {
+      console.error('Failed to update card with SRS values:', error);
+    }
     
     // Move to next card
     nextCard();
   }
 
   function nextCard() {
-    if (currentCardIndex < cards.length - 1) {
+    if (currentCardIndex < currentDeckCards.length - 1) {
       const newIndex = currentCardIndex + 1;
       studySessionStore.update(session => ({
         ...session,
@@ -180,9 +206,9 @@
 
 
   function selectCardByIndex(index: number) {
-    if (index >= 0 && index < cards.length) {
+    if (index >= 0 && index < currentDeckCards.length) {
       selectedCardIndex = index;
-      editCard(cards[index]);
+      editCard(currentDeckCards[index]);
     }
   }
 
@@ -378,13 +404,7 @@
   async function deleteDeck(deckId: string, deckName: string) {
     if (confirm(`Are you sure you want to delete the deck "${deckName}"? This will also delete all cards in this deck.`)) {
       try {
-        // First delete all cards in this deck
-        const cardsToDelete = cards.filter(card => card.deckId === deckId);
-        for (const card of cardsToDelete) {
-          await storageService.deleteCard(card.id);
-        }
-        
-        // Then delete the deck
+        // Delete the deck (this will also delete all cards in the deck)
         await storageService.deleteDeck(deckId);
         
         // Reset selection if the deleted deck was selected
@@ -526,13 +546,13 @@
       <!-- Progress indicator -->
       <div class="mb-6">
         <div class="flex justify-between text-sm text-gray-600 mb-2">
-          <span>Card {currentCardIndex + 1} of {cards.length}</span>
-          <span>{Math.round(((currentCardIndex + 1) / cards.length) * 100)}%</span>
+          <span>Card {currentCardIndex + 1} of {currentDeckCards.length}</span>
+          <span>{Math.round(((currentCardIndex + 1) / currentDeckCards.length) * 100)}%</span>
         </div>
         <div class="w-full bg-gray-200 rounded-full h-2">
           <div 
             class="bg-blue-600 h-2 rounded-full transition-all duration-300"
-            style="width: {((currentCardIndex + 1) / cards.length) * 100}%"
+            style="width: {((currentCardIndex + 1) / currentDeckCards.length) * 100}%"
           ></div>
         </div>
       </div>
@@ -652,7 +672,7 @@
       </div>
     </div>
 
-    {#if cards.length === 0}
+    {#if currentDeckCards.length === 0}
       <div class="text-center py-12">
         <div class="text-gray-500 mb-4">No cards in this deck</div>
         <button
@@ -663,7 +683,7 @@
         </button>
       </div>
     {:else}
-      <TableNavigation items={cards} selectedIndex={selectedCardIndex} onSelect={selectCardByIndex}>
+      <TableNavigation items={currentDeckCards} selectedIndex={selectedCardIndex} onSelect={selectCardByIndex}>
         <thead class="bg-gray-200">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

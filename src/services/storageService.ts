@@ -236,6 +236,13 @@ class StorageService {
     await this.saveCards(updatedCards);
   }
 
+  // Method to update a card during study mode (saves to localStorage only to avoid file permission prompts)
+  async updateCardDuringStudy(card: any) {
+    const cards = get(cardStore);
+    const updatedCards = cards.map(c => c.id === card.id ? card : c);
+    await this.saveCardsToLocalStorageOnly(updatedCards);
+  }
+
   async deleteCard(cardId: string) {
     const cards = get(cardStore);
     const filteredCards = cards.filter(c => c.id !== cardId);

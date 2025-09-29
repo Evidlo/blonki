@@ -6728,7 +6728,7 @@ openaiService.ts:64 Failed to list models: TypeError: Failed to fetch
 I've confirmed with curl that the endpoint is working
 
 ```
-[evan@blackbox ~] curl http://copernicus.ece.illinois.edu:8009/v1/models -H "Content-Type: application/json" -H "Authorization: Bearer ***REMOVED***" 
+[evan@blackbox ~] curl http://copernicus.ece.illinois.edu:8009/v1/models -H "Content-Type: application/json" -H "Authorization: Bearer shatpass" 
 {"object":"list","data":[{"id":"smollm:135m","object":"model","created":1754293653,"owned_by":"library"},{"id":"qwen3:14b","object":"model","created":1753948017,"owned_by":"library"},{"id":"llama3.3cowboy:latest","object":"model","created":1748029401,"owned_by":"library"},{"id":"deepseek_bash:latest","object":"model","created":1739910095,"owned_by":"library"},{"id":"llama3.3nut:latest","object":"model","created":1739056532,"owned_by":"library"},{"id":"deepseek:latest","object":"model","created":1739055796,"owned_by":"library"},{"id":"deepseek-coder-v2:latest","object":"model","created":1737501463,"owned_by":"library"},{"id":"phi4:latest","object":"model","created":1736658073,"owned_by":"library"},{"id":"llama3.3brit:latest","object":"model","created":1736523502,"owned_by":"library"},{"id":"llama3.3smslearn:latest","object":"model","created":1736468528,"owned_by":"library"},{"id":"llama3.3sms:latest","object":"model","created":1736450087,"owned_by":"library"},{"id":"llama3.3bro:latest","object":"model","created":1736272324,"owned_by":"library"},{"id":"qwqbro:latest","object":"model","created":1736210499,"owned_by":"library"},{"id":"llama3.3:latest","object":"model","created":1735147917,"owned_by":"library"},{"id":"qwq:latest","object":"model","created":1735147228,"owned_by":"library"},{"id":"phi3:mini","object":"model","created":1734991250,"owned_by":"library"}]}
 ```
 
@@ -6803,7 +6803,7 @@ My webserver is caddy (with iptables redirect 8009 to 8887 and this is my config
 :8887 {
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -6814,7 +6814,7 @@ My webserver is caddy (with iptables redirect 8009 to 8887 and this is my config
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
@@ -6851,7 +6851,7 @@ Here's how to fix your Caddy configuration:
 
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -6862,7 +6862,7 @@ Here's how to fix your Caddy configuration:
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
@@ -6923,7 +6923,7 @@ After updating your Caddy config, restart Caddy and the CORS error should be res
 
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -6934,7 +6934,7 @@ After updating your Caddy config, restart Caddy and the CORS error should be res
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
@@ -7031,7 +7031,7 @@ This could be happening at several levels:
 1. **Check your Caddy config** - Make sure you only have ONE `Access-Control-Allow-Origin` line
 2. **Test with curl** - Add the Origin header to see what Caddy is actually returning:
    ```bash
-   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
    ```
 3. **Check Ollama's CORS settings** - Ollama might have its own CORS configuration that's conflicting
 
@@ -7045,7 +7045,7 @@ This could be happening at several levels:
 If this works, then add back your auth and CORS headers one by one to find the conflict.
 
 ```shellscript
-   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
 ```
 
 ```plaintext
@@ -7080,13 +7080,13 @@ This could mean:
 
 **To debug this properly, test with the Origin header:**
 ```bash
-curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
 ```
 
 This will simulate what the browser is actually sending and should show you the duplicate headers that are causing the CORS error.
 
 ```shellscript
-curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
 ```
 
 ---
@@ -7095,7 +7095,7 @@ curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***"
 
 with header:
 
-[evan@blackbox ~] curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+[evan@blackbox ~] curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
 * Host copernicus.ece.illinois.edu:8009 was resolved.
 * IPv6: (none)
 * IPv4: 192.17.91.231
@@ -7107,7 +7107,7 @@ with header:
 > User-Agent: curl/8.11.1
 > Accept: */*
 > Origin: http://localhost:5173
-> Authorization: Bearer ***REMOVED***
+> Authorization: Bearer shatpass
 > 
 * Request completely sent off
 < HTTP/1.1 200 OK
@@ -7125,7 +7125,7 @@ with header:
 {"object":"list","data":[{"id":"smollm:135m","object":"model","created":1754293653,"owned_by":"library"},{"id":"qwen3:14b","object":"model","created":1753948017,"owned_by":"library"},{"id":"llama3.3cowboy:latest","object":"model","created":1748029401,"owned_by":"library"},{"id":"deepseek_bash:latest","object":"model","created":1739910095,"owned_by":"library"},{"id":"llama3.3nut:latest","object":"model","created":1739056532,"owned_by":"library"},{"id":"deepseek:latest","object":"model","created":1739055796,"owned_by":"library"},{"id":"deepseek-coder-v2:latest","object":"model","created":1737501463,"owned_by":"library"},{"id":"phi4:latest","object":"model","created":1736658073,"owned_by":"library"},{"id":"llama3.3brit:latest","object":"model","created":1736523502,"owned_by":"library"},{"id":"llama3.3smslearn:latest","object":"model","created":1736468528,"owned_by":"library"},{"id":"llama3.3sms:latest","object":"model","created":1736450087,"owned_by":"library"},{"id":"llama3.3bro:latest","object":"model","created":1736272324,"owned_by":"library"},{"id":"qwqbro:latest","object":"model","created":1736210499,"owned_by":"library"},{"id":"llama3.3:latest","object":"model","created":1735147917,"owned_by":"library"},{"id":"qwq:latest","object":"model","created":1735147228,"owned_by":"library"},{"id":"phi3:mini","object":"model","created":1734991250,"owned_by":"library"}]}
 * Connection #0 to host copernicus.ece.illinois.edu left intact
 
-[evan@blackbox ~] curl -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+[evan@blackbox ~] curl -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
 * Host copernicus.ece.illinois.edu:8009 was resolved.
 * IPv6: (none)
 * IPv4: 192.17.91.231
@@ -7136,7 +7136,7 @@ with header:
 > Host: copernicus.ece.illinois.edu:8009
 > User-Agent: curl/8.11.1
 > Accept: */*
-> Authorization: Bearer ***REMOVED***
+> Authorization: Bearer shatpass
 > 
 * Request completely sent off
 < HTTP/1.1 200 OK
@@ -7316,21 +7316,21 @@ Here's the Caddy config for Option 2 (conditional based on credentials):
 
   # For requests with credentials (Authorization header), use specific origin
   @credentialed {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
   header @credentialed Access-Control-Allow-Origin "http://localhost:5173"
 
   # For requests without credentials, use wildcard
   @no_credentials {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
   header @no_credentials Access-Control-Allow-Origin "*"
 
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -7341,7 +7341,7 @@ Here's the Caddy config for Option 2 (conditional based on credentials):
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
@@ -7374,21 +7374,21 @@ This will:
 
   # For requests with credentials (Authorization header), use specific origin
   @credentialed {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
   header @credentialed Access-Control-Allow-Origin "http://localhost:5173"
 
   # For requests without credentials, use wildcard
   @no_credentials {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
   header @no_credentials Access-Control-Allow-Origin "*"
 
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -7399,7 +7399,7 @@ This will:
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
@@ -7414,7 +7414,7 @@ This will:
 
 **User**
 
-[evan@blackbox ~] curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://copernicus.ece.illinois.edu:8009/v1/models -v
+[evan@blackbox ~] curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://copernicus.ece.illinois.edu:8009/v1/models -v
 * Host copernicus.ece.illinois.edu:8009 was resolved.
 * IPv6: (none)
 * IPv4: 192.17.91.231
@@ -7426,7 +7426,7 @@ This will:
 > User-Agent: curl/8.11.1
 > Accept: */*
 > Origin: http://localhost:5173
-> Authorization: Bearer ***REMOVED***
+> Authorization: Bearer shatpass
 > 
 * Request completely sent off
 < HTTP/1.1 200 OK
@@ -7453,7 +7453,7 @@ You're still getting duplicate `Access-Control-Allow-Origin` headers, but now th
 
 1. **Test without the proxy** - try hitting Ollama directly:
    ```bash
-   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://localhost:11434/v1/models -v
+   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://localhost:11434/v1/models -v
    ```
 
 2. **Check Ollama's CORS settings** - Ollama might have its own CORS configuration
@@ -7470,7 +7470,7 @@ If the simplified config works, then gradually add back the CORS headers to find
 The fact that you're getting the same origin twice suggests that both Caddy and another service (likely Ollama) are adding the CORS headers.
 
 ```shellscript
-   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://localhost:11434/v1/models -v
+   curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://localhost:11434/v1/models -v
 ```
 
 ```plaintext
@@ -7483,7 +7483,7 @@ The fact that you're getting the same origin twice suggests that both Caddy and 
 
 **User**
 
-(base) [evan@copernicus ~]    curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer ***REMOVED***" http://localhost:11434/v1/models -v
+(base) [evan@copernicus ~]    curl -H "Origin: http://localhost:5173" -H "Authorization: Bearer shatpass" http://localhost:11434/v1/models -v
 *   Trying 127.0.0.1:11434...
 * Connected to localhost (127.0.0.1) port 11434 (#0)
 > GET /v1/models HTTP/1.1
@@ -7491,7 +7491,7 @@ The fact that you're getting the same origin twice suggests that both Caddy and 
 > User-Agent: curl/7.81.0
 > Accept: */*
 > Origin: http://localhost:5173
-> Authorization: Bearer ***REMOVED***
+> Authorization: Bearer shatpass
 > 
 * Mark bundle as not supporting multiuse
 < HTTP/1.1 200 OK
@@ -7529,7 +7529,7 @@ This creates the duplicate headers.
 
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -7540,7 +7540,7 @@ This creates the duplicate headers.
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
@@ -7567,7 +7567,7 @@ Remove all the `Access-Control-Allow-*` header directives from Caddy since Ollam
 
   # Define a matcher for authorised API access
   @apiAuth {
-    header Authorization "Bearer ***REMOVED***"
+    header Authorization "Bearer shatpass"
   }
 
   # Proxy authorised requests
@@ -7578,7 +7578,7 @@ Remove all the `Access-Control-Allow-*` header directives from Caddy since Ollam
   # Define a matcher for unauthorised access
   @unauthorized {
     not {
-      header Authorization "Bearer ***REMOVED***"
+      header Authorization "Bearer shatpass"
     }
   }
 
