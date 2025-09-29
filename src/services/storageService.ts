@@ -264,9 +264,9 @@ class StorageService {
       await this.unlinkDeckFromFile(deckId);
     }
     
-    // Delete all cards in this deck
+    // Delete all cards in this deck - use saveCardsToLocalStorageOnly to avoid modifying files
     const filteredCards = cards.filter(c => c.deckId !== deckId);
-    await this.saveCards(filteredCards);
+    await this.saveCardsToLocalStorageOnly(filteredCards);
     
     // Delete the deck
     const filteredDecks = decks.filter(d => d.id !== deckId);

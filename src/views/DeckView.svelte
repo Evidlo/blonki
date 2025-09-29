@@ -28,12 +28,12 @@
   let settings: Settings | null = null;
   let studyCards: Card[] = [];
   let srsCounts = { new: 0, learning: 0, due: 0 };
+  let deckSRSCounts: Record<string, { new: number; learning: number; due: number }> = {};
 
   // Function to get SRS counts for a deck
   function getSRSCounts(deckId: string): { new: number; learning: number; due: number } {
     const deckCards = cards.filter(card => card.deckId === deckId);
     const counts = SM2Adapter.countCardsByStatus(deckCards);
-    console.log('getSRSCounts for deck', deckId, 'cards:', deckCards.length, 'counts:', counts);
     return counts;
   }
 
@@ -42,7 +42,7 @@
   selectedDeckStore.subscribe(value => selectedDeck = value);
   cardStore.subscribe(value => {
     cards = value;
-    // Update SRS counts when cards change
+    // Update SRS counts when cards change - but only if we have a selected deck
     if (selectedDeck) {
       srsCounts = getSRSCounts(selectedDeck);
     }
@@ -64,6 +64,15 @@
 
   // Reactive statement to find the current deck
   $: currentDeck = selectedDeck ? decks.find(d => d.id === selectedDeck) : null;
+  
+  // Reactive statement to update SRS counts for all decks when cards or decks change
+  $: {
+    deckSRSCounts = {};
+    for (const deck of decks) {
+      const counts = getSRSCounts(deck.id);
+      deckSRSCounts[deck.id] = counts;
+    }
+  }
 
   onMount(async () => {
     // Reset selected deck when entering Learn view
@@ -525,13 +534,7 @@
   async function deleteDeck(deckId: string, deckName: string) {
     if (confirm(`Are you sure you want to delete the deck "${deckName}"? This will also delete all cards in this deck.`)) {
       try {
-        // First delete all cards in this deck
-        const cardsToDelete = cards.filter(card => card.deckId === deckId);
-        for (const card of cardsToDelete) {
-          await storageService.deleteCard(card.id);
-        }
-        
-        // Then delete the deck
+        // Delete the deck (this will also delete all cards in the deck)
         await storageService.deleteDeck(deckId);
         
         // Reset selection if the deleted deck was selected
@@ -605,7 +608,7 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
           {#each decks as deck, index}
-            {@const srsCounts = getSRSCounts(deck.id)}
+            {@const srsCounts = deckSRSCounts[deck.id] ?? { new: 0, learning: 0, due: 0 }}
             <tr 
               class="hover:bg-gray-200 {selectedDeckIndex === index ? 'selected' : ''}"
               on:click={() => selectDeck(deck.id)}
