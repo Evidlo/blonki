@@ -1,0 +1,32 @@
+:8887 {
+  # Allow OPTIONS requests without authentication
+  @options {
+    method OPTIONS
+  }
+  reverse_proxy @options http://localhost:11434
+
+  # Define a matcher for authorised API access
+  @apiAuth {
+    header Authorization "Bearer redacted"
+  }                                                                           
+
+  # Proxy authorised requests to Ollama                                       
+  reverse_proxy @apiAuth http://localhost:11434 {                             
+    header_up Host {http.reverse_proxy.upstream.hostport}                     
+  }                                                                           
+
+  # Define a matcher for unauthorised access (excluding OPTIONS)
+  @unauthorized {                                                             
+    not {                                                                     
+      header Authorization "Bearer redacted"                                  
+    }
+    not {
+      method OPTIONS
+    }
+  }                                                                           
+
+  # Respond to unauthorised access                                            
+  respond @unauthorized "Unauthorized" 401 {                                  
+    close                                                                     
+  }                                                                           
+}
