@@ -8,41 +8,87 @@
 # this machine's public IP, then replace ":80" below with your
 # domain name.
 
-
 :8887 {
   tls internal
 
-  # Allow OPTIONS requests without authentication
+  # --- CORS preflight ---
   @options {
     method OPTIONS
   }
-  reverse_proxy @options http://localhost:11434
+  respond @options "" 204
 
-  # Define a matcher for authorised API access
+  # Add CORS headers to OPTIONS responses
+  header @options {
+    Access-Control-Allow-Origin "{http.request.header.Origin}"
+    Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers "Authorization, Content-Type"
+    Access-Control-Allow-Credentials "true"
+    Access-Control-Max-Age "3600"
+  }
+
+  # --- Global CORS headers for normal responses ---
+  header {
+    Access-Control-Allow-Origin "{http.request.header.Origin}"
+    Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers "Authorization, Content-Type"
+    Access-Control-Allow-Credentials "true"
+  }
+
+  # --- Authenticated proxying ---
   @apiAuth {
     header Authorization "Bearer redacted"
-  }                                                                           
+  }
+  reverse_proxy @apiAuth http://localhost:11434 {
+    header_up -Origin
+    header_up Host {http.reverse_proxy.upstream.hostport}
+  }
 
-  # Proxy authorised requests to Ollama                                       
-  reverse_proxy @apiAuth http://localhost:11434 {                             
-    header_up Host {http.reverse_proxy.upstream.hostport}                     
-  }                                                                           
-
-  # Define a matcher for unauthorised access (excluding OPTIONS)
-  @unauthorized {                                                             
-    not {                                                                     
+  # --- Unauthorized fallthrough ---
+  @unauthorized {
+    not {
       header Authorization "Bearer redacted"
     }
     not {
       method OPTIONS
     }
-  }                                                                           
-
-  # Respond to unauthorised access                                            
-  respond @unauthorized "Unauthorized" 401 {                                  
-    close                                                                     
-  }                                                                           
+  }
+  respond @unauthorized "Unauthorized" 401 {
+    close
+  }
 }
+
+
+copernicus.ece.illinois.edu:80, copernicus.ece.illinois.edu:443 {
+	# Set this path to your site's directory.
+	root * /srv/www
+	@txt { 
+		path_regexp ^.*\.(py|md|txt)$ 
+	}	
+	header @txt {
+		Content-Disposition inline
+		Content-Type text/plain; charset=UTF-8
+	}
+
+	# Enable the static file server.
+	file_server {
+		browse /srv/www/filelist.html
+	}
+
+	# Another common task is to set up a reverse proxy:
+	# reverse_proxy localhost:8080
+
+	# Or serve a PHP site through php-fpm:
+	# php_fastcgi localhost:9000
+	log {
+		level INFO
+	}
+
+	# reverse_proxy blog unix//tmp/caddy.sock { 
+	# 	transport fastcgi 
+	# }
+
+}
+
 
 # Refer to the Caddy docs for more information:
 # https://caddyserver.com/docs/caddyfile
